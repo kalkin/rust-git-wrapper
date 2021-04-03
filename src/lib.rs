@@ -1,13 +1,17 @@
+//! A wrapper around [git(1)](https://git-scm.com/docs/git) inspired by
+//! [GitPython](https://github.com/gitpython-developers/GitPython).
+
 use posix_errors::{error_from_output, to_posix_error, PosixError};
 use std::process::Command;
 use std::process::Output;
 
+/// Helper function executing git in the specified working directory and returning
+/// [std::process::Output].
 pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixError> {
     let result = Command::new("git")
         .args(&["-C", &working_dir])
         .args(args)
         .output();
-    //.expect("Failed to execute git command");
     if result.is_ok() {
         return Ok(result.unwrap());
     }
@@ -15,6 +19,7 @@ pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixEr
     return Err(to_posix_error(result.unwrap_err()));
 }
 
+/// Wrapper around [git-ls-remote(1)](https://git-scm.com/docs/git-ls-remote)
 pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
     let result = Command::new("git").arg("ls-remote").args(args).output();
 
@@ -46,6 +51,9 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     }
 }
 
+/// Return the path for the top level repository directory in current working dir.
+///
+/// This function will fail if the CWD is not a part of a git repository.
 pub fn top_level() -> Result<String, PosixError> {
     let output = Command::new("git")
         .args(&["rev-parse", "--show-toplevel"])
@@ -53,20 +61,21 @@ pub fn top_level() -> Result<String, PosixError> {
         .expect("Failed to execute git rev-parse");
     if output.status.success() {
         return Ok(String::from_utf8(output.stdout)
-            .unwrap()
-            .trim_end()
-            .to_string());
+                  .unwrap()
+                  .trim_end()
+                  .to_string());
     } else {
         return Err(error_from_output(output));
     }
 }
 
+/// Set a config value via [git-config(1)](https://git-scm.com/docs/git-config)
 pub fn config_set(
     working_dir: &str,
     file: &str,
     key: &str,
     value: &str,
-) -> Result<bool, PosixError> {
+    ) -> Result<bool, PosixError> {
     let output = Command::new("git")
         .args(&["-C", working_dir])
         .args(&["config", "--file", file, key, value])
@@ -79,10 +88,13 @@ pub fn config_set(
     }
 }
 
-pub fn sparse_checkout_add(working_dir: &str, target: &str) -> Result<bool, PosixError> {
+/// Update the sparse-checkout file to include additional patterns.
+///
+/// See also [git-sparse-checkout(1)](https://git-scm.com/docs/git-sparse-checkout)
+pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, PosixError> {
     let output = Command::new("git")
         .args(&["-C", working_dir])
-        .args(&["sparse-checkout", "add", target])
+        .args(&["sparse-checkout", "add", pattern])
         .output()
         .expect("Failed to execute git sparse-checkout");
     if output.status.success() {
@@ -92,6 +104,7 @@ pub fn sparse_checkout_add(working_dir: &str, target: &str) -> Result<bool, Posi
     }
 }
 
+/// Return `true` if the repository is sparsed
 pub fn is_sparse(working_dir: &str) -> bool {
     let output = Command::new("git")
         .args(&["-C", working_dir])
@@ -102,16 +115,18 @@ pub fn is_sparse(working_dir: &str) -> bool {
     return String::from_utf8(output.stdout).unwrap() == "true";
 }
 
+/// Create the `prefix` subtree by importing its contents from the given `remote`
+/// and remote `git_ref`.
 pub fn subtree_add(
     working_dir: &str,
-    target: &str,
+    prefix: &str,
     url: &str,
     git_ref: &str,
     msg: &str,
-) -> Result<bool, PosixError> {
+    ) -> Result<bool, PosixError> {
     let output = Command::new("git")
         .args(&["-C", working_dir])
-        .args(&["subtree", "add", "-P", target, url, git_ref, "-m", msg])
+        .args(&["subtree", "add", "-P", prefix, url, git_ref, "-m", msg])
         .output()
         .expect("Failed to execute git subtree");
     if output.status.success() {
@@ -121,11 +136,14 @@ pub fn subtree_add(
     }
 }
 
+/// Return all `.gitsubtrees` files in the working directory.
+///
+/// Uses [git-ls-files(1)](https://git-scm.com/docs/git-ls-files)
 pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
     let output = git_cmd_out(
         working_dir.to_string(),
         &["ls-files", "--", "*.gitsubtrees"],
-    )?;
+        )?;
     if output.status.success() {
         let tmp = String::from_utf8(output.stdout).unwrap();
         return Ok(tmp.lines().map(str::to_string).collect());
@@ -134,14 +152,18 @@ pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
     }
 }
 
+/// Return `true` if the working dir index is clean.
+///
+/// Uses [git-diff(1)](https://git-scm.com/docs/git-diff)
 pub fn is_working_dir_clean(working_dir: &str) -> Result<bool, PosixError> {
     let output = git_cmd_out(working_dir.to_string(), &["diff", "--quiet"]);
     return Ok(output?.status.success());
 }
 
-pub fn resolve_head(url: &str) -> Result<String, PosixError> {
+/// Figure out the default branch for given remote.
+pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
     let proc = Command::new("git")
-        .args(&["ls-remote", "--symref", url, "HEAD"])
+        .args(&["ls-remote", "--symref", remote, "HEAD"])
         .output()
         .expect("Failed to execute git command");
     if proc.status.success() {
@@ -161,9 +183,10 @@ pub fn resolve_head(url: &str) -> Result<String, PosixError> {
     return Err(error_from_output(proc));
 }
 
-pub fn remote_ref_to_id(url: &str, name: &str) -> Result<String, PosixError> {
+/// Resolve hash id of the given branch/tag at the remote.
+pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> {
     let proc = Command::new("git")
-        .args(&["ls-remote", url, name])
+        .args(&["ls-remote", remote, name])
         .output()
         .expect("Failed to execute git ls-remote");
     if proc.status.success() {
@@ -175,13 +198,14 @@ pub fn remote_ref_to_id(url: &str, name: &str) -> Result<String, PosixError> {
     return Err(error_from_output(proc));
 }
 
+/// Convert a long hash id to a short one.
 pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError> {
     let proc = git_cmd_out(working_dir.to_string(), &["rev-parse", "--short", long_ref])?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
-            .unwrap()
-            .trim_end()
-            .to_string());
+                  .unwrap()
+                  .trim_end()
+                  .to_string());
     }
     return Err(error_from_output(proc));
 }
