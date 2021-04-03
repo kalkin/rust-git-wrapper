@@ -1,21 +1,33 @@
+use posix_errors::{error_from_output, to_posix_error, PosixError};
 use std::process::Command;
 use std::process::Output;
 
-pub fn git_cmd_out<'a>(working_dir: String, args: &[&str]) -> Output {
-    return Command::new("git")
+pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixError> {
+    let result = Command::new("git")
         .args(&["-C", &working_dir])
         .args(args)
-        .output()
-        .expect("Failed to execute git command");
+        .output();
+    //.expect("Failed to execute git command");
+    if result.is_ok() {
+        return Ok(result.unwrap());
+    }
+
+    return Err(to_posix_error(result.unwrap_err()));
 }
 
-pub fn tags_from_url(url: &str) -> Result<Vec<String>, &'static str> {
+pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
+    let result = Command::new("git").arg("ls-remote").args(args).output();
+
+    if result.is_ok() {
+        return Ok(result.unwrap());
+    }
+
+    return Err(to_posix_error(result.unwrap_err()));
+}
+
+pub fn tags_from_url(url: &str) -> Result<Vec<String>, PosixError> {
     let mut vec = Vec::new();
-    let output = Command::new("git")
-        .args(&["ls-remote", "--refs", "--tags"])
-        .arg(url)
-        .output()
-        .expect("Failed to execute git ls-remote");
+    let output = ls_remote(&["--refs", "--tags", &url])?;
     if output.status.success() {
         let tmp = String::from_utf8(output.stdout).unwrap();
         for s in tmp.lines() {
@@ -29,12 +41,11 @@ pub fn tags_from_url(url: &str) -> Result<Vec<String>, &'static str> {
         }
         return Ok(vec);
     } else {
-        let tmp = String::from_utf8(output.stderr).unwrap();
-        return Err(Box::leak(tmp.into_boxed_str()));
+        return Err(error_from_output(output));
     }
 }
 
-pub fn top_level() -> Result<String, &'static str> {
+pub fn top_level() -> Result<String, PosixError> {
     let output = Command::new("git")
         .args(&["rev-parse", "--show-toplevel"])
         .output()
@@ -45,8 +56,7 @@ pub fn top_level() -> Result<String, &'static str> {
             .trim_end()
             .to_string());
     } else {
-        let tmp = String::from_utf8(output.stderr).unwrap();
-        return Err(Box::leak(tmp.into_boxed_str()));
+        return Err(error_from_output(output));
     }
 }
 
@@ -55,7 +65,7 @@ pub fn config_set(
     file: &str,
     key: &str,
     value: &str,
-) -> Result<bool, &'static str> {
+) -> Result<bool, PosixError> {
     let output = Command::new("git")
         .args(&["-C", working_dir])
         .args(&["config", "--file", file, key, value])
@@ -64,12 +74,11 @@ pub fn config_set(
     if output.status.success() {
         return Ok(true);
     } else {
-        let tmp = String::from_utf8(output.stderr).unwrap();
-        return Err(Box::leak(tmp.into_boxed_str()));
+        return Err(error_from_output(output));
     }
 }
 
-pub fn sparse_checkout_add(working_dir: &str, target: &str) -> Result<bool, &'static str> {
+pub fn sparse_checkout_add(working_dir: &str, target: &str) -> Result<bool, PosixError> {
     let output = Command::new("git")
         .args(&["-C", working_dir])
         .args(&["sparse-checkout", "add", target])
@@ -78,8 +87,7 @@ pub fn sparse_checkout_add(working_dir: &str, target: &str) -> Result<bool, &'st
     if output.status.success() {
         return Ok(true);
     } else {
-        let tmp = String::from_utf8(output.stderr).unwrap();
-        return Err(Box::leak(tmp.into_boxed_str()));
+        return Err(error_from_output(output));
     }
 }
 
@@ -99,7 +107,7 @@ pub fn subtree_add(
     url: &str,
     git_ref: &str,
     msg: &str,
-) -> Result<bool, &'static str> {
+) -> Result<bool, PosixError> {
     let output = Command::new("git")
         .args(&["-C", working_dir])
         .args(&["subtree", "add", "-P", target, url, git_ref, "-m", msg])
@@ -108,31 +116,29 @@ pub fn subtree_add(
     if output.status.success() {
         return Ok(true);
     } else {
-        let tmp = String::from_utf8(output.stderr).unwrap();
-        return Err(Box::leak(tmp.into_boxed_str()));
+        return Err(error_from_output(output));
     }
 }
 
-pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, &'static str> {
+pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
     let output = git_cmd_out(
         working_dir.to_string(),
         &["ls-files", "--", "*.gitsubtrees"],
-    );
+    )?;
     if output.status.success() {
         let tmp = String::from_utf8(output.stdout).unwrap();
         return Ok(tmp.lines().map(str::to_string).collect());
     } else {
-        let tmp = String::from_utf8(output.stderr).unwrap();
-        return Err(Box::leak(tmp.into_boxed_str()));
+        return Err(error_from_output(output));
     }
 }
 
-pub fn is_working_dir_clean(working_dir: &str) -> bool {
+pub fn is_working_dir_clean(working_dir: &str) -> Result<bool, PosixError> {
     let output = git_cmd_out(working_dir.to_string(), &["diff", "--quiet"]);
-    return output.status.success();
+    return Ok(output?.status.success());
 }
 
-pub fn resolve_head(url: &str) -> Result<String, String> {
+pub fn resolve_head(url: &str) -> Result<String, PosixError> {
     let proc = Command::new("git")
         .args(&["ls-remote", "--symref", url, "HEAD"])
         .output()
@@ -151,11 +157,10 @@ pub fn resolve_head(url: &str) -> Result<String, String> {
         return Ok(split.next().unwrap().to_string());
     }
 
-    let tmp = String::from_utf8(proc.stderr).unwrap();
-    return Err(tmp);
+    return Err(error_from_output(proc));
 }
 
-pub fn remote_ref_to_id(url: &str, name: &str) -> Result<String, String> {
+pub fn remote_ref_to_id(url: &str, name: &str) -> Result<String, PosixError> {
     let proc = Command::new("git")
         .args(&["ls-remote", url, name])
         .output()
@@ -166,18 +171,16 @@ pub fn remote_ref_to_id(url: &str, name: &str) -> Result<String, String> {
         let first_line = lines.next().expect("Failed to parse id from remote");
         return Ok(first_line.split("\t").next().unwrap().to_string());
     }
-    let tmp = String::from_utf8(proc.stderr).unwrap();
-    return Err(tmp);
+    return Err(error_from_output(proc));
 }
 
-pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, String> {
-    let proc = git_cmd_out(working_dir.to_string(), &["rev-parse", "--short", long_ref]);
+pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError> {
+    let proc = git_cmd_out(working_dir.to_string(), &["rev-parse", "--short", long_ref])?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
             .unwrap()
             .trim_end()
             .to_string());
     }
-    let tmp = String::from_utf8(proc.stderr).unwrap();
-    return Err(tmp);
+    return Err(error_from_output(proc));
 }
