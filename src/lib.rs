@@ -25,7 +25,8 @@ pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
     return Err(to_posix_error(result.unwrap_err()));
 }
 
-pub fn tags_from_url(url: &str) -> Result<Vec<String>, PosixError> {
+/// Returns all tags from a remote
+pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     let mut vec = Vec::new();
     let output = ls_remote(&["--refs", "--tags", &url])?;
     if output.status.success() {
