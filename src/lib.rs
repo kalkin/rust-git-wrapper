@@ -114,7 +114,7 @@ pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, Pos
     }
 }
 
-/// Return `true` if the repository is sparsed
+/// Return `true` if the repository is sparse
 pub fn is_sparse(working_dir: &str) -> bool {
     let output = Command::new("git")
         .args(&["-C", working_dir])
