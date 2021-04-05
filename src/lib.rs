@@ -68,10 +68,7 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
 ///
 /// This function will fail if the CWD is not a part of a git repository.
 pub fn top_level() -> Result<String, PosixError> {
-    let output = Command::new("git")
-        .args(&["rev-parse", "--show-toplevel"])
-        .output()
-        .expect("Failed to execute git rev-parse");
+    let output = git_cmd(&["rev-parse", "--show-toplevel"])?;
     if output.status.success() {
         Ok(String::from_utf8(output.stdout)
             .unwrap()
