@@ -19,6 +19,19 @@ pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixEr
     Err(to_posix_error(result.unwrap_err()))
 }
 
+/// Helper function executing git *without* a working directory and returning
+/// [std::process::Output].
+///
+/// Useful for git commands not needing a working directory like e.g. `git ls-remote`.
+pub fn git_cmd(args: &[&str]) -> Result<Output, PosixError> {
+    let result = Command::new("git").args(args).output();
+    if let Ok(value) = result {
+        return Ok(value);
+    }
+
+    Err(to_posix_error(result.unwrap_err()))
+}
+
 /// Wrapper around [git-ls-remote(1)](https://git-scm.com/docs/git-ls-remote)
 pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
     let result = Command::new("git").arg("ls-remote").args(args).output();
