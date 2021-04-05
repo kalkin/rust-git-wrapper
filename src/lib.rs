@@ -222,3 +222,12 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
     }
     Err(error_from_output(proc))
 }
+
+/// Clone a remote
+pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
+    let proc = git_cmd(&["clone", "--", url, directory])?;
+    if proc.status.success() {
+        return Ok(true);
+    }
+    Err(error_from_output(proc))
+}
