@@ -1,6 +1,9 @@
 //! A wrapper around [git(1)](https://git-scm.com/docs/git) inspired by
 //! [GitPython](https://github.com/gitpython-developers/GitPython).
 
+#![allow(unknown_lints)]
+#![warn(clippy::all)]
+
 use posix_errors::{error_from_output, to_posix_error, PosixError};
 use std::process::Command;
 use std::process::Output;
@@ -93,9 +96,9 @@ pub fn top_level() -> Result<String, PosixError> {
     let output = git_cmd(vec!["rev-parse", "--show-toplevel"])?;
     if output.status.success() {
         Ok(String::from_utf8(output.stdout)
-            .unwrap()
-            .trim_end()
-            .to_string())
+           .unwrap()
+           .trim_end()
+           .to_string())
     } else {
         Err(error_from_output(output))
     }
@@ -225,9 +228,9 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
     )?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
-            .unwrap()
-            .trim_end()
-            .to_string());
+                  .unwrap()
+                  .trim_end()
+                  .to_string());
     }
     Err(error_from_output(proc))
 }
@@ -237,6 +240,14 @@ pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
     let proc = git_cmd(vec!["clone", "--", url, directory])?;
     if proc.status.success() {
         return Ok(true);
+    }
+    Err(error_from_output(proc))
+}
+
+pub fn rev_list(working_dir: &str, args: Vec<&str>) -> Result<String, PosixError> {
+    let proc = cmd_in_dir!(working_dir, "rev-list", args).expect("Failed to run rev-list");
+    if proc.status.success() {
+        return Ok(String::from_utf8(proc.stdout).unwrap().trim_end().to_string());
     }
     Err(error_from_output(proc))
 }
