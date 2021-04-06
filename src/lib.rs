@@ -33,10 +33,7 @@ macro_rules! cmd_in_dir {
 /// Helper function executing git in the specified working directory and returning
 /// [std::process::Output].
 pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixError> {
-    let result = Command::new("git")
-        .args(&["-C", &working_dir])
-        .args(args)
-        .output();
+    let result = cmd_in_dir!(&working_dir, args);
     if let Ok(value) = result {
         return Ok(value);
     }
@@ -49,7 +46,7 @@ pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixEr
 ///
 /// Useful for git commands not needing a working directory like e.g. `git ls-remote`.
 pub fn git_cmd(args: &[&str]) -> Result<Output, PosixError> {
-    let result = Command::new("git").args(args).output();
+    let result = cmd!(args);
     if let Ok(value) = result {
         return Ok(value);
     }
@@ -59,7 +56,7 @@ pub fn git_cmd(args: &[&str]) -> Result<Output, PosixError> {
 
 /// Wrapper around [git-ls-remote(1)](https://git-scm.com/docs/git-ls-remote)
 pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
-    let result = Command::new("git").arg("ls-remote").args(args).output();
+    let result = cmd!("ls-remote", args);
 
     if let Ok(value) = result {
         return Ok(value);
@@ -111,10 +108,7 @@ pub fn config_set(
     key: &str,
     value: &str,
 ) -> Result<bool, PosixError> {
-    let output = Command::new("git")
-        .args(&["-C", working_dir])
-        .args(&["config", "--file", file, key, value])
-        .output()
+    let output = cmd_in_dir!(working_dir, "config", &["--file", file, key, value])
         .expect("Failed to execute git config");
     if output.status.success() {
         Ok(true)
@@ -127,10 +121,7 @@ pub fn config_set(
 ///
 /// See also [git-sparse-checkout(1)](https://git-scm.com/docs/git-sparse-checkout)
 pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, PosixError> {
-    let output = Command::new("git")
-        .args(&["-C", working_dir])
-        .args(&["sparse-checkout", "add", pattern])
-        .output()
+    let output = cmd_in_dir!(working_dir, "sparse-checkout", &["add", pattern])
         .expect("Failed to execute git sparse-checkout");
     if output.status.success() {
         Ok(true)
@@ -141,10 +132,7 @@ pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, Pos
 
 /// Return `true` if the repository is sparse
 pub fn is_sparse(working_dir: &str) -> bool {
-    let output = Command::new("git")
-        .args(&["-C", working_dir])
-        .args(&["config", "core.sparseCheckout"])
-        .output()
+    let output = cmd_in_dir!(working_dir, "config", &["core.sparseCheckout"])
         .expect("Failed to execute git config");
 
     String::from_utf8(output.stdout).unwrap() == "true"
@@ -159,11 +147,11 @@ pub fn subtree_add(
     git_ref: &str,
     msg: &str,
 ) -> Result<bool, PosixError> {
-    let output = Command::new("git")
-        .args(&["-C", working_dir])
-        .args(&["subtree", "add", "-P", prefix, url, git_ref, "-m", msg])
-        .output()
-        .expect("Failed to execute git subtree");
+    let output = cmd_in_dir!(
+        working_dir,
+        "subtree",
+        &["add", "-P", prefix, url, git_ref, "-m", msg]
+    ).expect("Failed to execute git subtree");
     if output.status.success() {
         Ok(true)
     } else {
@@ -197,9 +185,7 @@ pub fn is_working_dir_clean(working_dir: &str) -> Result<bool, PosixError> {
 
 /// Figure out the default branch for given remote.
 pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
-    let proc = Command::new("git")
-        .args(&["ls-remote", "--symref", remote, "HEAD"])
-        .output()
+    let proc = cmd!("ls-remote", &["--symref", remote, "HEAD"])
         .expect("Failed to execute git command");
     if proc.status.success() {
         let stdout = String::from_utf8(proc.stdout).unwrap();
@@ -220,10 +206,7 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
 
 /// Resolve hash id of the given branch/tag at the remote.
 pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> {
-    let proc = Command::new("git")
-        .args(&["ls-remote", remote, name])
-        .output()
-        .expect("Failed to execute git ls-remote");
+    let proc = cmd!("ls-remote", &[remote, name]).expect("Failed to execute git ls-remote");
     if proc.status.success() {
         let stdout = String::from_utf8(proc.stdout).unwrap();
         let mut lines = stdout.lines();
