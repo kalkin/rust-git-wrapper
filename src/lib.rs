@@ -32,7 +32,7 @@ macro_rules! cmd_in_dir {
 
 /// Helper function executing git in the specified working directory and returning
 /// [std::process::Output].
-pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixError> {
+pub fn git_cmd_out(working_dir: String, args: Vec<&str>) -> Result<Output, PosixError> {
     let result = cmd_in_dir!(&working_dir, args);
     if let Ok(value) = result {
         return Ok(value);
@@ -45,7 +45,7 @@ pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixEr
 /// [std::process::Output].
 ///
 /// Useful for git commands not needing a working directory like e.g. `git ls-remote`.
-pub fn git_cmd(args: &[&str]) -> Result<Output, PosixError> {
+pub fn git_cmd(args: Vec<&str>) -> Result<Output, PosixError> {
     let result = cmd!(args);
     if let Ok(value) = result {
         return Ok(value);
@@ -90,7 +90,7 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
 ///
 /// This function will fail if the CWD is not a part of a git repository.
 pub fn top_level() -> Result<String, PosixError> {
-    let output = git_cmd(&["rev-parse", "--show-toplevel"])?;
+    let output = git_cmd(vec!["rev-parse", "--show-toplevel"])?;
     if output.status.success() {
         Ok(String::from_utf8(output.stdout)
             .unwrap()
@@ -108,7 +108,7 @@ pub fn config_set(
     key: &str,
     value: &str,
 ) -> Result<bool, PosixError> {
-    let output = cmd_in_dir!(working_dir, "config", &["--file", file, key, value])
+    let output = cmd_in_dir!(working_dir, "config", vec!["--file", file, key, value])
         .expect("Failed to execute git config");
     if output.status.success() {
         Ok(true)
@@ -121,7 +121,7 @@ pub fn config_set(
 ///
 /// See also [git-sparse-checkout(1)](https://git-scm.com/docs/git-sparse-checkout)
 pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, PosixError> {
-    let output = cmd_in_dir!(working_dir, "sparse-checkout", &["add", pattern])
+    let output = cmd_in_dir!(working_dir, "sparse-checkout", vec!["add", pattern])
         .expect("Failed to execute git sparse-checkout");
     if output.status.success() {
         Ok(true)
@@ -132,7 +132,7 @@ pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, Pos
 
 /// Return `true` if the repository is sparse
 pub fn is_sparse(working_dir: &str) -> bool {
-    let output = cmd_in_dir!(working_dir, "config", &["core.sparseCheckout"])
+    let output = cmd_in_dir!(working_dir, "config", vec!["core.sparseCheckout"])
         .expect("Failed to execute git config");
 
     String::from_utf8(output.stdout).unwrap() == "true"
@@ -150,8 +150,9 @@ pub fn subtree_add(
     let output = cmd_in_dir!(
         working_dir,
         "subtree",
-        &["add", "-P", prefix, url, git_ref, "-m", msg]
-    ).expect("Failed to execute git subtree");
+        vec!["add", "-P", prefix, url, git_ref, "-m", msg]
+    )
+    .expect("Failed to execute git subtree");
     if output.status.success() {
         Ok(true)
     } else {
@@ -165,7 +166,7 @@ pub fn subtree_add(
 pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
     let output = git_cmd_out(
         working_dir.to_string(),
-        &["ls-files", "--", "*.gitsubtrees"],
+        vec!["ls-files", "--", "*.gitsubtrees"],
     )?;
     if output.status.success() {
         let tmp = String::from_utf8(output.stdout).unwrap();
@@ -179,14 +180,14 @@ pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
 ///
 /// Uses [git-diff(1)](https://git-scm.com/docs/git-diff)
 pub fn is_working_dir_clean(working_dir: &str) -> Result<bool, PosixError> {
-    let output = git_cmd_out(working_dir.to_string(), &["diff", "--quiet"]);
+    let output = git_cmd_out(working_dir.to_string(), vec!["diff", "--quiet"]);
     Ok(output?.status.success())
 }
 
 /// Figure out the default branch for given remote.
 pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
-    let proc = cmd!("ls-remote", &["--symref", remote, "HEAD"])
-        .expect("Failed to execute git command");
+    let proc =
+        cmd!("ls-remote", vec!["--symref", remote, "HEAD"]).expect("Failed to execute git command");
     if proc.status.success() {
         let stdout = String::from_utf8(proc.stdout).unwrap();
         let mut lines = stdout.lines();
@@ -206,7 +207,7 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
 
 /// Resolve hash id of the given branch/tag at the remote.
 pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> {
-    let proc = cmd!("ls-remote", &[remote, name]).expect("Failed to execute git ls-remote");
+    let proc = cmd!("ls-remote", vec![remote, name]).expect("Failed to execute git ls-remote");
     if proc.status.success() {
         let stdout = String::from_utf8(proc.stdout).unwrap();
         let mut lines = stdout.lines();
@@ -218,7 +219,10 @@ pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> 
 
 /// Convert a long hash id to a short one.
 pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError> {
-    let proc = git_cmd_out(working_dir.to_string(), &["rev-parse", "--short", long_ref])?;
+    let proc = git_cmd_out(
+        working_dir.to_string(),
+        vec!["rev-parse", "--short", long_ref],
+    )?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
             .unwrap()
@@ -230,7 +234,7 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
 
 /// Clone a remote
 pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
-    let proc = git_cmd(&["clone", "--", url, directory])?;
+    let proc = git_cmd(vec!["clone", "--", url, directory])?;
     if proc.status.success() {
         return Ok(true);
     }
