@@ -5,6 +5,31 @@ use posix_errors::{error_from_output, to_posix_error, PosixError};
 use std::process::Command;
 use std::process::Output;
 
+macro_rules! cmd {
+    ($args:expr) => {
+        Command::new("git").args($args).output()
+    };
+    ($name:expr, $args:expr) => {
+        Command::new("git").arg($name).args($args).output()
+    };
+}
+
+macro_rules! cmd_in_dir {
+    ( $working_dir:expr, $args:expr ) => {
+        Command::new("git")
+            .args(&["-C", $working_dir])
+            .args($args)
+            .output()
+    };
+    ($working_dir:expr, $name:expr, $args: expr) => {
+        Command::new("git")
+            .args(&["-C", $working_dir])
+            .arg($name)
+            .args($args)
+            .output()
+    };
+}
+
 /// Helper function executing git in the specified working directory and returning
 /// [std::process::Output].
 pub fn git_cmd_out(working_dir: String, args: &[&str]) -> Result<Output, PosixError> {
