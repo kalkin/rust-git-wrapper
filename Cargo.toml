@@ -1,8 +1,11 @@
 [package]
 name = "git-wrapper"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Bahtiar `kalkin-` Gadimov <bahtiar@gadimov.de>"]
 edition = "2018"
+description="Simple handy wrappers around git commands"
+readme = "README.md"
+keywords = ["git"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
