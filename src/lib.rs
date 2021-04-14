@@ -269,3 +269,10 @@ pub fn rev_list(working_dir: &str, args: Vec<&str>) -> Result<String, PosixError
     }
     Err(error_from_output(proc))
 }
+
+// Check if the first <commit> is an ancestor of the second <commit>.
+pub fn is_ancestor(working_dir: &str, first: &str, second: &str) -> Result<bool, PosixError> {
+    let args = vec!["--is-ancestor", first, second];
+    let proc = cmd_in_dir!(working_dir, "merge-base", args).expect("Failed to run rev-list");
+    Ok(proc.status.success())
+}
