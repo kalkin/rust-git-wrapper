@@ -7,6 +7,7 @@ description="Simple handy wrappers around git commands"
 readme = "README.md"
 keywords = ["git"]
 license = "LGPL-3.0-or-later"
+repository = "https://github.com/kalkin/rust-git-wrapper"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
