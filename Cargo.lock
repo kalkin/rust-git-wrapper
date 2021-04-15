@@ -2,4 +2,13 @@
 # It is not intended for manual editing.
 [[package]]
 name = "git-wrapper"
-version = "0.1.0"
+version = "0.2.0"
+dependencies = [
+ "posix-errors",
+]
+
+[[package]]
+name = "posix-errors"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bb522c69c20e41afca8337d17df5857866d3c214f007de2a4e6cd4e0f91d84b"
