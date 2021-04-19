@@ -253,6 +253,18 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
     Err(error_from_output(proc))
 }
 
+/// Convert a symbolic ref like HEAD to an git id
+pub fn ref_to_id(working_dir: &str, git_ref: &str) -> Result<String, PosixError> {
+    let proc = git_cmd_out(working_dir.to_string(), vec!["rev-parse", git_ref])?;
+    if proc.status.success() {
+        return Ok(String::from_utf8(proc.stdout)
+            .unwrap()
+            .trim_end()
+            .to_string());
+    }
+    Err(error_from_output(proc))
+}
+
 /// Clone a remote
 pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
     let proc = git_cmd(vec!["clone", "--", url, directory])?;
