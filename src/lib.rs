@@ -22,6 +22,7 @@
 #![warn(clippy::all)]
 
 use posix_errors::{error_from_output, to_posix_error, PosixError};
+use std::collections::HashMap;
 use std::process::Command;
 use std::process::Output;
 
@@ -289,4 +290,79 @@ pub fn is_ancestor(working_dir: &str, first: &str, second: &str) -> Result<bool,
     let args = vec!["--is-ancestor", first, second];
     let proc = cmd_in_dir!(working_dir, "merge-base", args).expect("Failed to run rev-list");
     Ok(proc.status.success())
+}
+
+enum RemoteDir {
+    Fetch,
+    Push,
+}
+
+struct RemoteLine {
+    name: String,
+    url: String,
+    dir: RemoteDir,
+}
+
+/// Represents a git remote
+pub struct Remote {
+    pub name: String,
+    pub push: Option<String>,
+    pub fetch: Option<String>,
+}
+
+/// Return a map of all remotes
+pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError> {
+    let mut my_map: HashMap<String, Remote> = HashMap::new();
+    let mut remote_lines: Vec<RemoteLine> = vec![];
+
+    let proc = cmd_in_dir!(working_dir, "remote", &["-v"]).expect("failed to run remote -v");
+    let text = String::from_utf8(proc.stdout).expect("UTF-8 encoding");
+
+    for line in text.lines().into_iter() {
+        let mut split = line.trim().split('\t');
+        let name = split.next().unwrap().to_string();
+        let reset = split.next().unwrap();
+        let mut reset_split = reset.split(' ');
+        let url = reset_split.next().unwrap().to_string();
+        let dir = if reset_split.next().unwrap() == "(fetch)" {
+            RemoteDir::Fetch
+        } else {
+            RemoteDir::Push
+        };
+        remote_lines.push(RemoteLine { name, url, dir })
+    }
+    for remote_line in remote_lines.iter() {
+        let mut remote = my_map.remove(&remote_line.name).unwrap_or(Remote {
+            name: remote_line.name.to_string(),
+            push: None,
+            fetch: None,
+        });
+        match remote_line.dir {
+            RemoteDir::Fetch => remote.fetch = Some(remote_line.url.to_string()),
+            RemoteDir::Push => remote.push = Some(remote_line.url.to_string()),
+        }
+        my_map.insert(remote_line.name.clone(), remote);
+    }
+
+    Ok(my_map)
+}
+
+/// Try to guess the main url for the repo
+///
+/// ⒈ Upstream
+/// ⒉ Origin
+/// ⒊ Random
+pub fn main_url(working_dir: &str) -> Result<Option<String>, PosixError> {
+    let remote_map = remotes(working_dir)?;
+    if let Some(remote) = remote_map.get("upstream") {
+        Ok(remote.fetch.clone().or(remote.push.clone()))
+    } else if let Some(remote) = remote_map.get("origin") {
+        Ok(remote.fetch.clone().or(remote.push.clone()))
+    } else if remote_map.is_empty() {
+        Ok(None)
+    } else {
+        let remotes: Vec<Remote> = remote_map.into_iter().map(|(_, v)| v).collect();
+        let remote = remotes.first().unwrap();
+        Ok(remote.fetch.clone().or(remote.push.clone()))
+    }
 }
