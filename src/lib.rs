@@ -15,7 +15,6 @@
 //You should have received a copy of the GNU Lesser General Public License
 //along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-
 //! A wrapper around [git(1)](https://git-scm.com/docs/git) inspired by
 //! [GitPython](https://github.com/gitpython-developers/GitPython).
 
@@ -114,9 +113,9 @@ pub fn top_level() -> Result<String, PosixError> {
     let output = git_cmd(vec!["rev-parse", "--show-toplevel"])?;
     if output.status.success() {
         Ok(String::from_utf8(output.stdout)
-           .unwrap()
-           .trim_end()
-           .to_string())
+            .unwrap()
+            .trim_end()
+            .to_string())
     } else {
         Err(error_from_output(output))
     }
@@ -246,9 +245,9 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
     )?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
-                  .unwrap()
-                  .trim_end()
-                  .to_string());
+            .unwrap()
+            .trim_end()
+            .to_string());
     }
     Err(error_from_output(proc))
 }
@@ -277,7 +276,10 @@ pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
 pub fn rev_list(working_dir: &str, args: Vec<&str>) -> Result<String, PosixError> {
     let proc = cmd_in_dir!(working_dir, "rev-list", args).expect("Failed to run rev-list");
     if proc.status.success() {
-        return Ok(String::from_utf8(proc.stdout).unwrap().trim_end().to_string());
+        return Ok(String::from_utf8(proc.stdout)
+            .unwrap()
+            .trim_end()
+            .to_string());
     }
     Err(error_from_output(proc))
 }
