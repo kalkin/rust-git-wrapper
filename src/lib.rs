@@ -355,14 +355,14 @@ pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError>
 pub fn main_url(working_dir: &str) -> Result<Option<String>, PosixError> {
     let remote_map = remotes(working_dir)?;
     if let Some(remote) = remote_map.get("upstream") {
-        Ok(remote.fetch.clone().or(remote.push.clone()))
+        Ok(remote.fetch.clone().or_else(|| remote.push.clone()))
     } else if let Some(remote) = remote_map.get("origin") {
-        Ok(remote.fetch.clone().or(remote.push.clone()))
+        Ok(remote.fetch.clone().or_else(|| remote.push.clone()))
     } else if remote_map.is_empty() {
         Ok(None)
     } else {
         let remotes: Vec<Remote> = remote_map.into_iter().map(|(_, v)| v).collect();
         let remote = remotes.first().unwrap();
-        Ok(remote.fetch.clone().or(remote.push.clone()))
+        Ok(remote.fetch.clone().or_else(|| remote.push.clone()))
     }
 }
