@@ -21,7 +21,7 @@
 #![allow(unknown_lints)]
 #![warn(clippy::all)]
 
-use posix_errors::{error_from_output, to_posix_error, PosixError};
+use posix_errors::{error_from_output, PosixError};
 use std::collections::HashMap;
 use std::process::Command;
 use std::process::Output;
@@ -59,7 +59,7 @@ pub fn git_cmd_out(working_dir: String, args: Vec<&str>) -> Result<Output, Posix
         return Ok(value);
     }
 
-    Err(to_posix_error(result.unwrap_err()))
+    Err(PosixError::from(result.unwrap_err()))
 }
 
 /// Helper function executing git *without* a working directory and returning
@@ -72,7 +72,7 @@ pub fn git_cmd(args: Vec<&str>) -> Result<Output, PosixError> {
         return Ok(value);
     }
 
-    Err(to_posix_error(result.unwrap_err()))
+    Err(PosixError::from(result.unwrap_err()))
 }
 
 /// Wrapper around [git-ls-remote(1)](https://git-scm.com/docs/git-ls-remote)
@@ -83,7 +83,7 @@ pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
         return Ok(value);
     }
 
-    Err(to_posix_error(result.unwrap_err()))
+    Err(PosixError::from(result.unwrap_err()))
 }
 
 /// Returns all tags from a remote
