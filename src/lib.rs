@@ -53,8 +53,8 @@ macro_rules! cmd_in_dir {
 
 /// Helper function executing git in the specified working directory and returning
 /// [`std::process::Output`].
-pub fn git_cmd_out(working_dir: String, args: Vec<&str>) -> Result<Output, PosixError> {
-    let result = cmd_in_dir!(&working_dir, args);
+pub fn git_cmd_out(working_dir: &str, args: Vec<&str>) -> Result<Output, PosixError> {
+    let result = cmd_in_dir!(working_dir, args);
     if let Ok(value) = result {
         return Ok(value);
     }
@@ -185,10 +185,7 @@ pub fn subtree_add(
 ///
 /// Uses [git-ls-files(1)](https://git-scm.com/docs/git-ls-files)
 pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
-    let output = git_cmd_out(
-        working_dir.to_string(),
-        vec!["ls-files", "--", "*.gitsubtrees"],
-    )?;
+    let output = git_cmd_out(working_dir, vec!["ls-files", "--", "*.gitsubtrees"])?;
     if output.status.success() {
         let tmp = String::from_utf8(output.stdout).unwrap();
         Ok(tmp.lines().map(str::to_string).collect())
@@ -201,7 +198,7 @@ pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
 ///
 /// Uses [git-diff(1)](https://git-scm.com/docs/git-diff)
 pub fn is_working_dir_clean(working_dir: &str) -> Result<bool, PosixError> {
-    let output = git_cmd_out(working_dir.to_string(), vec!["diff", "--quiet"]);
+    let output = git_cmd_out(working_dir, vec!["diff", "--quiet"]);
     Ok(output?.status.success())
 }
 
@@ -240,10 +237,7 @@ pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> 
 
 /// Convert a long hash id to a short one.
 pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError> {
-    let proc = git_cmd_out(
-        working_dir.to_string(),
-        vec!["rev-parse", "--short", long_ref],
-    )?;
+    let proc = git_cmd_out(working_dir, vec!["rev-parse", "--short", long_ref])?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
             .unwrap()
@@ -255,7 +249,7 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
 
 /// Convert a symbolic ref like HEAD to an git id
 pub fn ref_to_id(working_dir: &str, git_ref: &str) -> Result<String, PosixError> {
-    let proc = git_cmd_out(working_dir.to_string(), vec!["rev-parse", git_ref])?;
+    let proc = git_cmd_out(working_dir, vec!["rev-parse", git_ref])?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
             .unwrap()
