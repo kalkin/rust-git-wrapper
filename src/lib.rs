@@ -277,10 +277,7 @@ pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
 pub fn rev_list(working_dir: &str, args: Vec<&str>) -> Result<String, PosixError> {
     let proc = cmd_in_dir!(working_dir, "rev-list", args).expect("Failed to run rev-list");
     if proc.status.success() {
-        return Ok(String::from_utf8(proc.stdout)
-            .unwrap()
-            .trim_end()
-            .to_string());
+        return Ok(String::from_utf8_lossy(&proc.stdout).trim_end().to_string());
     }
     Err(error_from_output(proc))
 }
