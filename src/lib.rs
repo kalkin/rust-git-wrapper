@@ -21,7 +21,7 @@
 #![allow(unknown_lints)]
 #![warn(clippy::all)]
 
-use posix_errors::{error_from_output, PosixError};
+use posix_errors::PosixError;
 use std::collections::HashMap;
 use std::process::Command;
 use std::process::Output;
@@ -119,7 +119,7 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
         }
         Ok(vec)
     } else {
-        Err(error_from_output(output))
+        Err(PosixError::from(output))
     }
 }
 
@@ -138,7 +138,7 @@ pub fn top_level() -> Result<String, PosixError> {
             .trim_end()
             .to_string())
     } else {
-        Err(error_from_output(output))
+        Err(PosixError::from(output))
     }
 }
 
@@ -158,7 +158,7 @@ pub fn config_set(
     if output.status.success() {
         Ok(true)
     } else {
-        Err(error_from_output(output))
+        Err(PosixError::from(output))
     }
 }
 
@@ -175,7 +175,7 @@ pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, Pos
     if output.status.success() {
         Ok(true)
     } else {
-        Err(error_from_output(output))
+        Err(PosixError::from(output))
     }
 }
 
@@ -214,7 +214,7 @@ pub fn subtree_add(
     if output.status.success() {
         Ok(true)
     } else {
-        Err(error_from_output(output))
+        Err(PosixError::from(output))
     }
 }
 
@@ -231,7 +231,7 @@ pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
         let tmp = String::from_utf8(output.stdout).expect("UTF-8 encoding");
         Ok(tmp.lines().map(str::to_string).collect())
     } else {
-        Err(error_from_output(output))
+        Err(PosixError::from(output))
     }
 }
 
@@ -272,7 +272,7 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
             .to_string());
     }
 
-    Err(error_from_output(proc))
+    Err(PosixError::from(proc))
 }
 
 /// Resolve hash id of the given branch/tag at the remote.
@@ -292,7 +292,7 @@ pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> 
             .expect("Failed to parse id")
             .to_string());
     }
-    Err(error_from_output(proc))
+    Err(PosixError::from(proc))
 }
 
 /// Convert a long hash id to a short one.
@@ -308,7 +308,7 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
             .trim_end()
             .to_string());
     }
-    Err(error_from_output(proc))
+    Err(PosixError::from(proc))
 }
 
 /// Convert a symbolic ref like HEAD to an git id
@@ -324,7 +324,7 @@ pub fn ref_to_id(working_dir: &str, git_ref: &str) -> Result<String, PosixError>
             .trim_end()
             .to_string());
     }
-    Err(error_from_output(proc))
+    Err(PosixError::from(proc))
 }
 
 /// Clone a remote
@@ -337,7 +337,7 @@ pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
     if proc.status.success() {
         return Ok(true);
     }
-    Err(error_from_output(proc))
+    Err(PosixError::from(proc))
 }
 
 /// Lists commit objects in reverse chronological order
@@ -350,7 +350,7 @@ pub fn rev_list(working_dir: &str, args: Vec<&str>) -> Result<String, PosixError
     if proc.status.success() {
         return Ok(String::from_utf8_lossy(&proc.stdout).trim_end().to_string());
     }
-    Err(error_from_output(proc))
+    Err(PosixError::from(proc))
 }
 
 /// Check if the first <commit> is an ancestor of the second <commit>.
