@@ -53,6 +53,10 @@ macro_rules! cmd_in_dir {
 
 /// Helper function executing git in the specified working directory and returning
 /// [`std::process::Output`].
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn git_cmd_out(working_dir: &str, args: Vec<&str>) -> Result<Output, PosixError> {
     let result = cmd_in_dir!(working_dir, args);
     if let Ok(value) = result {
@@ -66,6 +70,10 @@ pub fn git_cmd_out(working_dir: &str, args: Vec<&str>) -> Result<Output, PosixEr
 /// [`std::process::Output`].
 ///
 /// Useful for git commands not needing a working directory like e.g. `git ls-remote`.
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn git_cmd(args: Vec<&str>) -> Result<Output, PosixError> {
     let result = cmd!(args);
     if let Ok(value) = result {
@@ -76,6 +84,10 @@ pub fn git_cmd(args: Vec<&str>) -> Result<Output, PosixError> {
 }
 
 /// Wrapper around [git-ls-remote(1)](https://git-scm.com/docs/git-ls-remote)
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
     let result = cmd!("ls-remote", args);
 
@@ -87,6 +99,10 @@ pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
 }
 
 /// Returns all tags from a remote
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     let mut vec = Vec::new();
     let output = ls_remote(&["--refs", "--tags", &url])?;
@@ -110,6 +126,10 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
 /// Return the path for the top level repository directory in current working dir.
 ///
 /// This function will fail if the CWD is not a part of a git repository.
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn top_level() -> Result<String, PosixError> {
     let output = git_cmd(vec!["rev-parse", "--show-toplevel"])?;
     if output.status.success() {
@@ -123,6 +143,10 @@ pub fn top_level() -> Result<String, PosixError> {
 }
 
 /// Set a config value via [git-config(1)](https://git-scm.com/docs/git-config)
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn config_set(
     working_dir: &str,
     file: &str,
@@ -141,6 +165,10 @@ pub fn config_set(
 /// Update the sparse-checkout file to include additional patterns.
 ///
 /// See also [git-sparse-checkout(1)](https://git-scm.com/docs/git-sparse-checkout)
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, PosixError> {
     let output = cmd_in_dir!(working_dir, "sparse-checkout", vec!["add", pattern])
         .expect("Failed to execute git sparse-checkout");
@@ -152,6 +180,10 @@ pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, Pos
 }
 
 /// Return `true` if the repository is sparse
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 #[must_use]
 pub fn is_sparse(working_dir: &str) -> bool {
     let output = cmd_in_dir!(working_dir, "config", vec!["core.sparseCheckout"])
@@ -162,6 +194,10 @@ pub fn is_sparse(working_dir: &str) -> bool {
 
 /// Create the `prefix` subtree by importing its contents from the given `remote`
 /// and remote `git_ref`.
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn subtree_add(
     working_dir: &str,
     prefix: &str,
@@ -185,6 +221,10 @@ pub fn subtree_add(
 /// Return all `.gitsubtrees` files in the working directory.
 ///
 /// Uses [git-ls-files(1)](https://git-scm.com/docs/git-ls-files)
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
     let output = git_cmd_out(working_dir, vec!["ls-files", "--", "*.gitsubtrees"])?;
     if output.status.success() {
@@ -198,12 +238,20 @@ pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
 /// Return `true` if the working dir index is clean.
 ///
 /// Uses [git-diff(1)](https://git-scm.com/docs/git-diff)
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn is_working_dir_clean(working_dir: &str) -> Result<bool, PosixError> {
     let output = git_cmd_out(working_dir, vec!["diff", "--quiet"]);
     Ok(output?.status.success())
 }
 
 /// Figure out the default branch for given remote.
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
     let proc =
         cmd!("ls-remote", vec!["--symref", remote, "HEAD"]).expect("Failed to execute git command");
@@ -228,6 +276,10 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
 }
 
 /// Resolve hash id of the given branch/tag at the remote.
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> {
     let proc = cmd!("ls-remote", vec![remote, name]).expect("Failed to execute git ls-remote");
     if proc.status.success() {
@@ -244,6 +296,10 @@ pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> 
 }
 
 /// Convert a long hash id to a short one.
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError> {
     let proc = git_cmd_out(working_dir, vec!["rev-parse", "--short", long_ref])?;
     if proc.status.success() {
@@ -256,6 +312,10 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
 }
 
 /// Convert a symbolic ref like HEAD to an git id
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn ref_to_id(working_dir: &str, git_ref: &str) -> Result<String, PosixError> {
     let proc = git_cmd_out(working_dir, vec!["rev-parse", git_ref])?;
     if proc.status.success() {
@@ -268,6 +328,10 @@ pub fn ref_to_id(working_dir: &str, git_ref: &str) -> Result<String, PosixError>
 }
 
 /// Clone a remote
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
     let proc = git_cmd(vec!["clone", "--", url, directory])?;
     if proc.status.success() {
@@ -276,6 +340,11 @@ pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
     Err(error_from_output(proc))
 }
 
+/// Lists commit objects in reverse chronological order
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn rev_list(working_dir: &str, args: Vec<&str>) -> Result<String, PosixError> {
     let proc = cmd_in_dir!(working_dir, "rev-list", args).expect("Failed to run rev-list");
     if proc.status.success() {
@@ -284,7 +353,11 @@ pub fn rev_list(working_dir: &str, args: Vec<&str>) -> Result<String, PosixError
     Err(error_from_output(proc))
 }
 
-// Check if the first <commit> is an ancestor of the second <commit>.
+/// Check if the first <commit> is an ancestor of the second <commit>.
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn is_ancestor(working_dir: &str, first: &str, second: &str) -> Result<bool, PosixError> {
     let args = vec!["--is-ancestor", first, second];
     let proc = cmd_in_dir!(working_dir, "merge-base", args).expect("Failed to run rev-list");
@@ -310,6 +383,10 @@ pub struct Remote {
 }
 
 /// Return a map of all remotes
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError> {
     let mut my_map: HashMap<String, Remote> = HashMap::new();
     let mut remote_lines: Vec<RemoteLine> = vec![];
@@ -351,6 +428,10 @@ pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError>
 /// ⒈ Upstream
 /// ⒉ Origin
 /// ⒊ Random
+///
+/// # Errors
+///
+/// Will return [`PosixError`] if command exits with an error code.
 pub fn main_url(working_dir: &str) -> Result<Option<String>, PosixError> {
     let remote_map = remotes(working_dir)?;
     if let Some(remote) = remote_map.get("upstream") {
