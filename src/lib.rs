@@ -91,7 +91,7 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     let mut vec = Vec::new();
     let output = ls_remote(&["--refs", "--tags", &url])?;
     if output.status.success() {
-        let tmp = String::from_utf8(output.stdout).unwrap();
+        let tmp = String::from_utf8(output.stdout).expect("Expected UTF-8");
         for s in tmp.lines() {
             let mut split = s.splitn(3, '/');
             split.next();
@@ -114,7 +114,7 @@ pub fn top_level() -> Result<String, PosixError> {
     let output = git_cmd(vec!["rev-parse", "--show-toplevel"])?;
     if output.status.success() {
         Ok(String::from_utf8(output.stdout)
-            .unwrap()
+            .expect("UTF-8 encoding")
             .trim_end()
             .to_string())
     } else {
@@ -157,7 +157,7 @@ pub fn is_sparse(working_dir: &str) -> bool {
     let output = cmd_in_dir!(working_dir, "config", vec!["core.sparseCheckout"])
         .expect("Failed to execute git config");
 
-    String::from_utf8(output.stdout).unwrap() == "true"
+    String::from_utf8(output.stdout).expect("UTF-8 encoding") == "true"
 }
 
 /// Create the `prefix` subtree by importing its contents from the given `remote`
@@ -188,7 +188,7 @@ pub fn subtree_add(
 pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
     let output = git_cmd_out(working_dir, vec!["ls-files", "--", "*.gitsubtrees"])?;
     if output.status.success() {
-        let tmp = String::from_utf8(output.stdout).unwrap();
+        let tmp = String::from_utf8(output.stdout).expect("UTF-8 encoding");
         Ok(tmp.lines().map(str::to_string).collect())
     } else {
         Err(error_from_output(output))
@@ -208,7 +208,7 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
     let proc =
         cmd!("ls-remote", vec!["--symref", remote, "HEAD"]).expect("Failed to execute git command");
     if proc.status.success() {
-        let stdout = String::from_utf8(proc.stdout).unwrap();
+        let stdout = String::from_utf8(proc.stdout).expect("UTF-8 encoding");
         let mut lines = stdout.lines();
         let first_line = lines.next().expect("Failed to parse HEAD from remote");
         let mut split = first_line
@@ -218,7 +218,10 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
             .splitn(3, '/');
         split.next();
         split.next();
-        return Ok(split.next().unwrap().to_string());
+        return Ok(split
+            .next()
+            .expect("Failed to parse default branch")
+            .to_string());
     }
 
     Err(error_from_output(proc))
@@ -228,10 +231,14 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
 pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> {
     let proc = cmd!("ls-remote", vec![remote, name]).expect("Failed to execute git ls-remote");
     if proc.status.success() {
-        let stdout = String::from_utf8(proc.stdout).unwrap();
+        let stdout = String::from_utf8(proc.stdout).expect("UTF-8 encoding");
         let mut lines = stdout.lines();
-        let first_line = lines.next().expect("Failed to parse id from remote");
-        return Ok(first_line.split('\t').next().unwrap().to_string());
+        let first_line = lines.next().expect("Failed to parse first line");
+        return Ok(first_line
+            .split('\t')
+            .next()
+            .expect("Failed to parse id")
+            .to_string());
     }
     Err(error_from_output(proc))
 }
@@ -241,7 +248,7 @@ pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError
     let proc = git_cmd_out(working_dir, vec!["rev-parse", "--short", long_ref])?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
-            .unwrap()
+            .expect("UTF-8 encoding")
             .trim_end()
             .to_string());
     }
@@ -253,7 +260,7 @@ pub fn ref_to_id(working_dir: &str, git_ref: &str) -> Result<String, PosixError>
     let proc = git_cmd_out(working_dir, vec!["rev-parse", git_ref])?;
     if proc.status.success() {
         return Ok(String::from_utf8(proc.stdout)
-            .unwrap()
+            .expect("UTF-8 encoding")
             .trim_end()
             .to_string());
     }
@@ -312,11 +319,11 @@ pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError>
 
     for line in text.lines() {
         let mut split = line.trim().split('\t');
-        let name = split.next().unwrap().to_string();
-        let reset = split.next().unwrap();
-        let mut reset_split = reset.split(' ');
-        let url = reset_split.next().unwrap().to_string();
-        let dir = if reset_split.next().unwrap() == "(fetch)" {
+        let name = split.next().expect("Remote name").to_string();
+        let rest = split.next().expect("Remote rest");
+        let mut rest_split = rest.split(' ');
+        let url = rest_split.next().expect("Remote url").to_string();
+        let dir = if rest_split.next().expect("Remote direction") == "(fetch)" {
             RemoteDir::Fetch
         } else {
             RemoteDir::Push
@@ -354,7 +361,7 @@ pub fn main_url(working_dir: &str) -> Result<Option<String>, PosixError> {
         Ok(None)
     } else {
         let remotes: Vec<Remote> = remote_map.into_iter().map(|(_, v)| v).collect();
-        let remote = remotes.first().unwrap();
+        let remote = remotes.first().expect("At least one remote");
         Ok(remote.fetch.clone().or_else(|| remote.push.clone()))
     }
 }
