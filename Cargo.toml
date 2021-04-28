@@ -1,6 +1,6 @@
 [package]
 name = "git-wrapper"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Bahtiar `kalkin-` Gadimov <bahtiar@gadimov.de>"]
 edition = "2018"
 description="Simple handy wrappers around git commands"
