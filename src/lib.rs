@@ -152,6 +152,7 @@ pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, Pos
 }
 
 /// Return `true` if the repository is sparse
+#[must_use]
 pub fn is_sparse(working_dir: &str) -> bool {
     let output = cmd_in_dir!(working_dir, "config", vec!["core.sparseCheckout"])
         .expect("Failed to execute git config");
