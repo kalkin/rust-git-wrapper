@@ -16,7 +16,7 @@
 //along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 //! A wrapper around [git(1)](https://git-scm.com/docs/git) inspired by
-//! [GitPython](https://github.com/gitpython-developers/GitPython).
+//! [`GitPython`](https://github.com/gitpython-developers/GitPython).
 
 #![allow(unknown_lints)]
 #![warn(clippy::all)]
@@ -52,7 +52,7 @@ macro_rules! cmd_in_dir {
 }
 
 /// Helper function executing git in the specified working directory and returning
-/// [std::process::Output].
+/// [`std::process::Output`].
 pub fn git_cmd_out(working_dir: String, args: Vec<&str>) -> Result<Output, PosixError> {
     let result = cmd_in_dir!(&working_dir, args);
     if let Ok(value) = result {
@@ -63,7 +63,7 @@ pub fn git_cmd_out(working_dir: String, args: Vec<&str>) -> Result<Output, Posix
 }
 
 /// Helper function executing git *without* a working directory and returning
-/// [std::process::Output].
+/// [`std::process::Output`].
 ///
 /// Useful for git commands not needing a working directory like e.g. `git ls-remote`.
 pub fn git_cmd(args: Vec<&str>) -> Result<Output, PosixError> {
