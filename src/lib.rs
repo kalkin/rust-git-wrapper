@@ -315,7 +315,7 @@ pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError>
     let proc = cmd_in_dir!(working_dir, "remote", &["-v"]).expect("failed to run remote -v");
     let text = String::from_utf8(proc.stdout).expect("UTF-8 encoding");
 
-    for line in text.lines().into_iter() {
+    for line in text.lines() {
         let mut split = line.trim().split('\t');
         let name = split.next().unwrap().to_string();
         let reset = split.next().unwrap();
@@ -328,7 +328,7 @@ pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError>
         };
         remote_lines.push(RemoteLine { name, url, dir })
     }
-    for remote_line in remote_lines.iter() {
+    for remote_line in remote_lines {
         let mut remote = my_map.remove(&remote_line.name).unwrap_or(Remote {
             name: remote_line.name.to_string(),
             push: None,
