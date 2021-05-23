@@ -376,6 +376,7 @@ struct RemoteLine {
 }
 
 /// Represents a git remote
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Remote {
     pub name: String,
     pub push: Option<String>,
