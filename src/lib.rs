@@ -21,7 +21,7 @@
 #![allow(unknown_lints)]
 #![warn(clippy::all)]
 
-use posix_errors::PosixError;
+pub use posix_errors::PosixError;
 use std::collections::HashMap;
 use std::process::Command;
 use std::process::Output;
