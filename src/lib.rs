@@ -406,7 +406,7 @@ pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError>
         } else {
             RemoteDir::Push
         };
-        remote_lines.push(RemoteLine { name, url, dir })
+        remote_lines.push(RemoteLine { name, url, dir });
     }
     for remote_line in remote_lines {
         let mut remote = my_map.remove(&remote_line.name).unwrap_or(Remote {
