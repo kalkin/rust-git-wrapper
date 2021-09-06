@@ -105,7 +105,7 @@ pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
 /// Will return [`PosixError`] if command exits with an error code.
 pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     let mut vec = Vec::new();
-    let output = ls_remote(&["--refs", "--tags", &url])?;
+    let output = ls_remote(&["--refs", "--tags", url])?;
     if output.status.success() {
         let tmp = String::from_utf8(output.stdout).expect("Expected UTF-8");
         for s in tmp.lines() {
