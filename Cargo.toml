@@ -1,6 +1,6 @@
 [package]
 name = "git-wrapper"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Bahtiar `kalkin-` Gadimov <bahtiar@gadimov.de>"]
 edition = "2018"
 description="Simple handy wrappers around git commands"
@@ -12,4 +12,4 @@ repository = "https://github.com/kalkin/rust-git-wrapper"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-posix-errors = { path = "../posix-errors", version = "^1.1.0" }
+posix-errors = { path = "../posix-errors", version = "^1.1.1" }
