@@ -123,7 +123,7 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     }
 }
 
-/// Return the path for the top level repository directory in current working dir.
+/// Return the path for the top level repository directory for current working dir.
 ///
 /// This function will fail if the CWD is not a part of a git repository.
 ///
