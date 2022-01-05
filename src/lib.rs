@@ -23,6 +23,7 @@
 
 pub use posix_errors::PosixError;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::Output;
 
@@ -33,54 +34,6 @@ macro_rules! cmd {
     ($name:expr, $args:expr) => {
         Command::new("git").arg($name).args($args).output()
     };
-}
-
-macro_rules! cmd_in_dir {
-    ( $working_dir:expr, $args:expr ) => {
-        Command::new("git")
-            .args(&["-C", $working_dir])
-            .args($args)
-            .output()
-    };
-    ($working_dir:expr, $name:expr, $args: expr) => {
-        Command::new("git")
-            .args(&["-C", $working_dir])
-            .arg($name)
-            .args($args)
-            .output()
-    };
-}
-
-/// Helper function executing git in the specified working directory and returning
-/// [`std::process::Output`].
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn git_cmd_out(working_dir: &str, args: Vec<&str>) -> Result<Output, PosixError> {
-    let result = cmd_in_dir!(working_dir, args);
-    if let Ok(value) = result {
-        return Ok(value);
-    }
-
-    Err(PosixError::from(result.unwrap_err()))
-}
-
-/// Helper function executing git *without* a working directory and returning
-/// [`std::process::Output`].
-///
-/// Useful for git commands not needing a working directory like e.g. `git ls-remote`.
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn git_cmd(args: Vec<&str>) -> Result<Output, PosixError> {
-    let result = cmd!(args);
-    if let Ok(value) = result {
-        return Ok(value);
-    }
-
-    Err(PosixError::from(result.unwrap_err()))
 }
 
 /// Wrapper around [git-ls-remote(1)](https://git-scm.com/docs/git-ls-remote)
@@ -123,98 +76,34 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     }
 }
 
-/// Return the path for the top level repository directory for current working dir.
-///
-/// This function will fail if the CWD is not a part of a git repository.
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn top_level() -> Result<String, PosixError> {
-    let output = git_cmd(vec!["rev-parse", "--show-toplevel"])?;
-    if output.status.success() {
-        Ok(String::from_utf8(output.stdout)
-            .expect("UTF-8 encoding")
-            .trim_end()
-            .to_string())
-    } else {
-        Err(PosixError::from(output))
-    }
+pub enum ConfigSetError {
+    InvalidSectionOrKey(String),
+    InvalidConfigFile(String),
+    WriteFailed(String),
 }
 
-/// Set a config value via [git-config(1)](https://git-scm.com/docs/git-config)
-///
 /// # Errors
 ///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn config_set(
-    working_dir: &str,
-    file: &str,
-    key: &str,
-    value: &str,
-) -> Result<bool, PosixError> {
-    let output = cmd_in_dir!(working_dir, "config", vec!["--file", file, key, value])
-        .expect("Failed to execute git config");
-    if output.status.success() {
-        Ok(true)
+/// Throws [`ConfigSetError`] on errors
+///
+/// # Panics
+///
+/// When git-config(1) execution fails
+pub fn config_file_set(file: &Path, key: &str, value: &str) -> Result<(), ConfigSetError> {
+    let args = &["--file", file.to_str().expect("UTF-8 encoding"), key, value];
+    let mut cmd = Command::new("git");
+    cmd.arg("config").args(args);
+    let out = cmd.output().expect("Failed to execute git-config(1)");
+    if out.status.success() {
+        Ok(())
     } else {
-        Err(PosixError::from(output))
-    }
-}
-
-/// Update the sparse-checkout file to include additional patterns.
-///
-/// See also [git-sparse-checkout(1)](https://git-scm.com/docs/git-sparse-checkout)
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn sparse_checkout_add(working_dir: &str, pattern: &str) -> Result<bool, PosixError> {
-    let output = cmd_in_dir!(working_dir, "sparse-checkout", vec!["add", pattern])
-        .expect("Failed to execute git sparse-checkout");
-    if output.status.success() {
-        Ok(true)
-    } else {
-        Err(PosixError::from(output))
-    }
-}
-
-/// Return `true` if the repository is sparse
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-#[must_use]
-pub fn is_sparse(working_dir: &str) -> bool {
-    let output = cmd_in_dir!(working_dir, "config", vec!["core.sparseCheckout"])
-        .expect("Failed to execute git config");
-
-    String::from_utf8(output.stdout).expect("UTF-8 encoding") == "true"
-}
-
-/// Create the `prefix` subtree by importing its contents from the given `remote`
-/// and remote `git_ref`.
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn subtree_add(
-    working_dir: &str,
-    prefix: &str,
-    url: &str,
-    git_ref: &str,
-    msg: &str,
-) -> Result<bool, PosixError> {
-    let output = cmd_in_dir!(
-        working_dir,
-        "subtree",
-        vec!["add", "-P", prefix, url, git_ref, "-m", msg]
-    )
-    .expect("Failed to execute git subtree");
-    if output.status.success() {
-        Ok(true)
-    } else {
-        Err(PosixError::from(output))
+        let msg = String::from_utf8(out.stdout).expect("UTF-8 encoding");
+        match out.status.code().unwrap() {
+            1 => Err(ConfigSetError::InvalidSectionOrKey(msg)),
+            3 => Err(ConfigSetError::InvalidConfigFile(msg)),
+            4 => Err(ConfigSetError::WriteFailed(msg)),
+            _ => panic!("Unexpected error:\n{}", msg),
+        }
     }
 }
 
@@ -225,33 +114,12 @@ pub fn subtree_add(
 /// # Errors
 ///
 /// Will return [`PosixError`] if command exits with an error code.
-pub fn subtree_files(working_dir: &str) -> Result<Vec<String>, PosixError> {
-    let output = git_cmd_out(working_dir, vec!["ls-files", "--", "*.gitsubtrees"])?;
-    if output.status.success() {
-        let tmp = String::from_utf8(output.stdout).expect("UTF-8 encoding");
-        Ok(tmp.lines().map(str::to_string).collect())
-    } else {
-        Err(PosixError::from(output))
-    }
-}
-
-/// Return `true` if the working dir index is clean.
-///
-/// Uses [git-diff(1)](https://git-scm.com/docs/git-diff)
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn is_working_dir_clean(working_dir: &str) -> Result<bool, PosixError> {
-    let output = git_cmd_out(working_dir, vec!["diff", "--quiet"]);
-    Ok(output?.status.success())
-}
-
 /// Figure out the default branch for given remote.
 ///
 /// # Errors
 ///
 /// Will return [`PosixError`] if command exits with an error code.
+/// TODO Return a custom error type
 pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
     let proc =
         cmd!("ls-remote", vec!["--symref", remote, "HEAD"]).expect("Failed to execute git command");
@@ -275,95 +143,6 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
     Err(PosixError::from(proc))
 }
 
-/// Resolve hash id of the given branch/tag at the remote.
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn remote_ref_to_id(remote: &str, name: &str) -> Result<String, PosixError> {
-    let proc = cmd!("ls-remote", vec![remote, name]).expect("Failed to execute git ls-remote");
-    if proc.status.success() {
-        let stdout = String::from_utf8(proc.stdout).expect("UTF-8 encoding");
-        let mut lines = stdout.lines();
-        let first_line = lines.next().expect("Failed to parse first line");
-        return Ok(first_line
-            .split('\t')
-            .next()
-            .expect("Failed to parse id")
-            .to_string());
-    }
-    Err(PosixError::from(proc))
-}
-
-/// Convert a long hash id to a short one.
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn short_ref(working_dir: &str, long_ref: &str) -> Result<String, PosixError> {
-    let proc = git_cmd_out(working_dir, vec!["rev-parse", "--short", long_ref])?;
-    if proc.status.success() {
-        return Ok(String::from_utf8(proc.stdout)
-            .expect("UTF-8 encoding")
-            .trim_end()
-            .to_string());
-    }
-    Err(PosixError::from(proc))
-}
-
-/// Convert a symbolic ref like HEAD to an git id
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn ref_to_id(working_dir: &str, git_ref: &str) -> Result<String, PosixError> {
-    let proc = git_cmd_out(working_dir, vec!["rev-parse", git_ref])?;
-    if proc.status.success() {
-        return Ok(String::from_utf8(proc.stdout)
-            .expect("UTF-8 encoding")
-            .trim_end()
-            .to_string());
-    }
-    Err(PosixError::from(proc))
-}
-
-/// Clone a remote
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn clone(url: &str, directory: &str) -> Result<bool, PosixError> {
-    let proc = git_cmd(vec!["clone", "--", url, directory])?;
-    if proc.status.success() {
-        return Ok(true);
-    }
-    Err(PosixError::from(proc))
-}
-
-/// Lists commit objects in reverse chronological order
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn rev_list(working_dir: &str, args: Vec<&str>) -> Result<String, PosixError> {
-    let proc = cmd_in_dir!(working_dir, "rev-list", args).expect("Failed to run rev-list");
-    if proc.status.success() {
-        return Ok(String::from_utf8_lossy(&proc.stdout).trim_end().to_string());
-    }
-    Err(PosixError::from(proc))
-}
-
-/// Check if the first <commit> is an ancestor of the second <commit>.
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn is_ancestor(working_dir: &str, first: &str, second: &str) -> Result<bool, PosixError> {
-    let args = vec!["--is-ancestor", first, second];
-    let proc = cmd_in_dir!(working_dir, "merge-base", args).expect("Failed to run rev-list");
-    Ok(proc.status.success())
-}
-
 enum RemoteDir {
     Fetch,
     Push,
@@ -383,67 +162,1133 @@ pub struct Remote {
     pub fetch: Option<String>,
 }
 
-/// Return a map of all remotes
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn remotes(working_dir: &str) -> Result<HashMap<String, Remote>, PosixError> {
-    let mut my_map: HashMap<String, Remote> = HashMap::new();
-    let mut remote_lines: Vec<RemoteLine> = vec![];
-
-    let proc = cmd_in_dir!(working_dir, "remote", &["-v"]).expect("failed to run remote -v");
-    let text = String::from_utf8(proc.stdout).expect("UTF-8 encoding");
-
-    for line in text.lines() {
-        let mut split = line.trim().split('\t');
-        let name = split.next().expect("Remote name").to_string();
-        let rest = split.next().expect("Remote rest");
-        let mut rest_split = rest.split(' ');
-        let url = rest_split.next().expect("Remote url").to_string();
-        let dir = if rest_split.next().expect("Remote direction") == "(fetch)" {
-            RemoteDir::Fetch
-        } else {
-            RemoteDir::Push
-        };
-        remote_lines.push(RemoteLine { name, url, dir });
+fn cwd() -> Result<PathBuf, RepoError> {
+    if let Ok(result) = std::env::current_dir() {
+        Ok(result)
+    } else {
+        Err(RepoError::FailAccessCwd)
     }
-    for remote_line in remote_lines {
-        let mut remote = my_map.remove(&remote_line.name).unwrap_or(Remote {
-            name: remote_line.name.to_string(),
-            push: None,
-            fetch: None,
-        });
-        match remote_line.dir {
-            RemoteDir::Fetch => remote.fetch = Some(remote_line.url.to_string()),
-            RemoteDir::Push => remote.push = Some(remote_line.url.to_string()),
-        }
-        my_map.insert(remote_line.name.clone(), remote);
-    }
-
-    Ok(my_map)
 }
 
-/// Try to guess the main url for the repo
+/// A path which is canonicalized and exists.
+#[derive(Debug, Clone)]
+pub struct AbsoluteDirPath(PathBuf);
+
+impl AbsoluteDirPath {
+    fn new(path: &Path) -> Result<AbsoluteDirPath, RepoError> {
+        let path_buf;
+        if path.is_absolute() {
+            path_buf = path.to_path_buf();
+        } else if let Ok(p) = path.canonicalize() {
+            path_buf = p;
+        } else {
+            return Err(RepoError::AbsolutionError(path.to_path_buf()));
+        }
+
+        Ok(AbsoluteDirPath(path_buf))
+    }
+}
+
+/// The main repository object.
 ///
-/// ⒈ Upstream
-/// ⒉ Origin
-/// ⒊ Random
-///
-/// # Errors
-///
-/// Will return [`PosixError`] if command exits with an error code.
-pub fn main_url(working_dir: &str) -> Result<Option<String>, PosixError> {
-    let remote_map = remotes(working_dir)?;
-    if let Some(remote) = remote_map.get("upstream") {
-        Ok(remote.fetch.clone().or_else(|| remote.push.clone()))
-    } else if let Some(remote) = remote_map.get("origin") {
-        Ok(remote.fetch.clone().or_else(|| remote.push.clone()))
-    } else if remote_map.is_empty() {
-        Ok(None)
+/// This wrapper allows to keep track of optional *git-dir* and *work-tree* directories when
+/// executing commands. This functionality was needed for `glv` & `git-stree` project.
+
+#[derive(Clone, Debug)]
+pub enum Repository {
+    Bare {
+        git_dir: AbsoluteDirPath,
+    },
+    Normal {
+        git_dir: AbsoluteDirPath,
+        work_tree: AbsoluteDirPath,
+    },
+}
+
+#[derive(Debug, PartialEq)]
+pub enum RepoError {
+    GitDirNotFound,
+    InvalidDirectory(PathBuf),
+    AbsolutionError(PathBuf),
+    FailAccessCwd,
+}
+
+fn search_git_dir(start: &Path) -> Result<AbsoluteDirPath, RepoError> {
+    let path;
+    if start.is_absolute() {
+        path = start.to_path_buf();
     } else {
-        let remotes: Vec<Remote> = remote_map.into_iter().map(|(_, v)| v).collect();
-        let remote = remotes.first().expect("At least one remote");
-        Ok(remote.fetch.clone().or_else(|| remote.push.clone()))
+        match start.canonicalize() {
+            Ok(path_buf) => path = path_buf,
+            Err(_) => return Err(RepoError::InvalidDirectory(start.to_path_buf())),
+        }
+    }
+
+    match (
+        path.join("HEAD").canonicalize(),
+        path.join("objects").canonicalize(),
+    ) {
+        (Ok(head_path), Ok(objects_path)) => {
+            if head_path.is_file() && objects_path.is_dir() {
+                return AbsoluteDirPath::new(&path);
+            }
+        }
+        (_, _) => {}
+    }
+
+    for parent in path.ancestors() {
+        let candidate = parent.join(".git");
+        if candidate.is_dir() && candidate.exists() {
+            return Ok(AbsoluteDirPath::new(candidate.as_ref()))?;
+        }
+    }
+    Err(RepoError::GitDirNotFound)
+}
+
+fn work_tree_from_git_dir(git_dir: &AbsoluteDirPath) -> Result<Option<AbsoluteDirPath>, RepoError> {
+    let gd = git_dir.0.to_str().unwrap();
+    let mut cmd = Command::new("git");
+    cmd.args(&["--git-dir", gd, "rev-parse", "--is-bare-repository"]);
+    let output = cmd.output().expect("failed to execute rev-parse");
+    if output.status.success() {
+        let tmp = String::from_utf8_lossy(&output.stdout);
+        if tmp.trim() == "true" {
+            return Ok(None);
+        }
+    }
+
+    match git_dir.0.parent() {
+        Some(dir) => Ok(Some(AbsoluteDirPath::new(dir)?)),
+        None => Ok(None),
+    }
+}
+
+fn git_dir_from_work_tree(work_tree: &AbsoluteDirPath) -> Result<AbsoluteDirPath, RepoError> {
+    let result = work_tree.0.join(".git");
+    AbsoluteDirPath::new(result.as_ref())
+}
+
+#[derive(Debug, PartialEq)]
+pub struct InvalidRefError;
+
+/// Getters
+impl Repository {
+    #[must_use]
+    pub fn is_bare(&self) -> bool {
+        matches!(self, Self::Bare { .. })
+    }
+
+    /// # Panics
+    ///
+    /// Panics of executing git-diff(1) fails
+    #[must_use]
+    pub fn is_clean(&self) -> bool {
+        let output = self.git().args(&["diff", "--quiet"]).output().unwrap();
+        if !output.status.success() {
+            return false;
+        }
+
+        let output = self.git().args(&["rev-parse", "HEAD"]).output().unwrap();
+        output.status.success()
+    }
+
+    #[must_use]
+    pub fn remotes(&self) -> Option<HashMap<String, Remote>> {
+        let args = &["remote", "-v"];
+        let mut cmd = self.git();
+        let out = cmd
+            .args(args)
+            .output()
+            .expect("Failed to execute git-remote(1)");
+        if !out.status.success() {
+            eprintln!(
+                "Failed to execute git-remote(1):\n{}",
+                String::from_utf8_lossy(&out.stderr).to_string()
+            );
+            return None;
+        }
+
+        let text = String::from_utf8_lossy(&out.stdout);
+        let mut my_map: HashMap<String, Remote> = HashMap::new();
+        let mut remote_lines: Vec<RemoteLine> = vec![];
+        for line in text.lines() {
+            let mut split = line.trim().split('\t');
+            let name = split.next().expect("Remote name").to_string();
+            let rest = split.next().expect("Remote rest");
+            let mut rest_split = rest.split(' ');
+            let url = rest_split.next().expect("Remote url").to_string();
+            let dir = if rest_split.next().expect("Remote direction") == "(fetch)" {
+                RemoteDir::Fetch
+            } else {
+                RemoteDir::Push
+            };
+            remote_lines.push(RemoteLine { name, url, dir });
+        }
+        for remote_line in remote_lines {
+            let mut remote = my_map.remove(&remote_line.name).unwrap_or(Remote {
+                name: remote_line.name.to_string(),
+                push: None,
+                fetch: None,
+            });
+            match remote_line.dir {
+                RemoteDir::Fetch => remote.fetch = Some(remote_line.url.to_string()),
+                RemoteDir::Push => remote.push = Some(remote_line.url.to_string()),
+            }
+            my_map.insert(remote_line.name.clone(), remote);
+        }
+
+        Some(my_map)
+    }
+
+    // TODO return a Result with custom error type
+    #[must_use]
+    pub fn head(&self) -> Option<String> {
+        let args = &["rev-parse", "HEAD"];
+        let mut cmd = self.git();
+        let out = cmd
+            .args(args)
+            .output()
+            .expect("Failed to execute git-commit(1)");
+        if !out.status.success() {
+            return None;
+        }
+        let result = String::from_utf8_lossy(&out.stdout).to_string();
+        Some(result)
+    }
+
+    #[must_use]
+    pub fn work_tree(&self) -> Option<PathBuf> {
+        match self {
+            Self::Normal { work_tree, .. } => Some(work_tree.0.clone()),
+            Self::Bare { .. } => None,
+        }
+    }
+
+    /// Return true if the repo is sparse
+    #[must_use]
+    pub fn is_sparse(&self) -> bool {
+        let path = self.git_dir_path().join("info").join("sparse-checkout");
+        path.exists()
+    }
+
+    fn git_dir(&self) -> &AbsoluteDirPath {
+        match self {
+            Self::Normal { git_dir, .. } | Self::Bare { git_dir } => git_dir,
+        }
+    }
+
+    fn git_dir_path(&self) -> &PathBuf {
+        match self {
+            Self::Normal { git_dir, .. } | Self::Bare { git_dir } => &git_dir.0,
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Will return [`InvalidRefError`] if invalid reference provided
+    pub fn short_ref(&self, long_ref: &str) -> Result<String, InvalidRefError> {
+        let args = vec!["rev-parse", "--short", long_ref];
+        let mut cmd = self.git();
+        let out = cmd
+            .args(args)
+            .output()
+            .expect("Failed to execute git-commit(1)");
+        if !out.status.success() {
+            return Err(InvalidRefError);
+        }
+
+        let short_ref = String::from_utf8_lossy(&out.stderr).to_string();
+        Ok(short_ref)
+    }
+}
+
+/// Constructors
+impl Repository {
+    /// # Errors
+    ///
+    /// Will return [`RepoError`] when fails to find repository
+    pub fn discover(path: &Path) -> Result<Self, RepoError> {
+        let git_dir = search_git_dir(path)?;
+        if let Some(work_tree) = work_tree_from_git_dir(&git_dir)? {
+            return Ok(Self::Normal { git_dir, work_tree });
+        }
+        Ok(Self::Bare { git_dir })
+    }
+
+    /// # Errors
+    ///
+    /// Will return [`RepoError`] when fails to find repository
+    pub fn default() -> Result<Self, RepoError> {
+        Repository::from_args(None, None, None)
+    }
+
+    #[must_use]
+    pub fn new(git_dir: AbsoluteDirPath, work_tree: Option<AbsoluteDirPath>) -> Self {
+        match work_tree {
+            Some(work_tree) => Self::Normal { git_dir, work_tree },
+            None => Self::Bare { git_dir },
+        }
+    }
+
+    /// # Panics
+    ///
+    /// When git execution fails
+    ///
+    /// # Errors
+    ///
+    /// Returns a string output when something goes horrible wrong
+    pub fn create(path: &Path) -> Result<Self, String> {
+        let mut cmd = Command::new("git");
+        let out = cmd.arg("init").current_dir(&path).output().unwrap();
+
+        if out.status.success() {
+            let work_tree = AbsoluteDirPath::new(path).unwrap();
+            let git_dir = AbsoluteDirPath::new(&path.join(".git")).unwrap();
+            Ok(Repository::Normal { git_dir, work_tree })
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).to_string())
+        }
+    }
+
+    /// # Panics
+    ///
+    /// When git execution fails
+    ///
+    /// # Errors
+    ///
+    /// Returns a string output when something goes horrible wrong
+    pub fn create_bare(path: &Path) -> Result<Self, String> {
+        let mut cmd = Command::new("git");
+        let out = cmd
+            .arg("init")
+            .arg("--bare")
+            .current_dir(&path)
+            .output()
+            .unwrap();
+
+        if out.status.success() {
+            let git_dir = AbsoluteDirPath::new(path).unwrap();
+            Ok(Repository::Bare { git_dir })
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).to_string())
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Will return [`RepoError`] when fails to find repository
+    pub fn from_args(
+        change: Option<&str>,
+        git: Option<&str>,
+        work: Option<&str>,
+    ) -> Result<Self, RepoError> {
+        match (change, git, work) {
+            (None, None, None) => {
+                let git_dir = if let Ok(gd) = std::env::var("GIT_DIR") {
+                    AbsoluteDirPath::new(gd.as_ref())?
+                } else {
+                    search_git_dir(&cwd()?)?
+                };
+
+                let work_tree = if let Ok(wt) = std::env::var("GIT_WORK_TREE") {
+                    Some(AbsoluteDirPath::new(wt.as_ref())?)
+                } else {
+                    work_tree_from_git_dir(&git_dir)?
+                };
+
+                Ok(Repository::new(git_dir, work_tree))
+            }
+            (_, _, _) => {
+                let root = change.map_or_else(PathBuf::new, PathBuf::from);
+                match (git, work) {
+                    (Some(g_dir), None) => {
+                        let git_dir = AbsoluteDirPath::new(&root.join(g_dir))?;
+                        let work_tree = work_tree_from_git_dir(&git_dir)?;
+                        Ok(Repository::new(git_dir, work_tree))
+                    }
+                    (None, Some(w_dir)) => {
+                        let work_tree = AbsoluteDirPath::new(&root.join(w_dir))?;
+                        let git_dir = git_dir_from_work_tree(&work_tree)?;
+                        Ok(Self::Normal { git_dir, work_tree })
+                    }
+                    (Some(g_dir), Some(w_dir)) => {
+                        let git_dir = AbsoluteDirPath::new(&root.join(g_dir))?;
+                        let work_tree = AbsoluteDirPath::new(&root.join(w_dir))?;
+                        Ok(Self::Normal { git_dir, work_tree })
+                    }
+                    (None, None) => {
+                        let git_dir = search_git_dir(&root)?;
+                        let work_tree = work_tree_from_git_dir(&git_dir)?;
+                        Ok(Repository::new(git_dir, work_tree))
+                    }
+                }
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn git(&self) -> std::process::Command {
+        let mut cmd = std::process::Command::new("git");
+        let git_dir = self.git_dir().0.to_str().expect("Convert to string");
+        cmd.env("GIT_DIR", git_dir);
+
+        if let Self::Normal { work_tree, .. } = self {
+            let work_tree = work_tree.0.to_str().expect("Convert to string");
+            cmd.env("GIT_WORK_TREE", work_tree);
+            cmd.current_dir(work_tree);
+        }
+        cmd
+    }
+
+    pub fn git_in_dir<P: AsRef<Path>>(&self, path: P) -> std::process::Command {
+        let mut cmd = self.git();
+        cmd.current_dir(path);
+        cmd
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SubtreeAddError {
+    BareRepository,
+    WorkTreeDirty,
+    Failure(String, i32),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SubtreePullError {
+    BareRepository,
+    WorkTreeDirty,
+    Failure(String, i32),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SubtreePushError {
+    BareRepository,
+    Failure(String, i32),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum SubtreeSplitError {
+    BareRepository,
+    WorkTreeDirty,
+    Failure(String, i32),
+}
+
+#[derive(Debug)]
+pub enum ConfigReadError {
+    InvalidSectionOrKey(String),
+    InvalidConfigFile(String),
+}
+
+#[derive(Debug)]
+pub enum StagingError {
+    BareRepository,
+    Failure(String, i32),
+    FileDoesNotExist(PathBuf),
+    InvalidPath(PathBuf),
+    UTF8Decode(PathBuf),
+}
+
+#[derive(Debug)]
+pub enum CommitError {
+    Failure(String, i32),
+    UTF8Decode(PathBuf),
+    BareRepository,
+}
+
+#[derive(Debug)]
+pub enum RefSearchError {
+    /// Thrown when `git-ls-remote(1)` fails to execute.
+    Failure(String),
+    /// Generic IO error
+    IOError(std::io::Error),
+    /// Failed to find reference
+    NotFound,
+    /// `git-ls-remote(1)` returned garbage on `STDOUT`
+    ParsingFailure(String),
+    /// Failed to decode strings
+    UTF8Decode(std::string::FromUtf8Error),
+}
+
+impl From<std::io::Error> for RefSearchError {
+    fn from(prev: std::io::Error) -> Self {
+        Self::IOError(prev)
+    }
+}
+
+impl From<std::string::FromUtf8Error> for RefSearchError {
+    fn from(prev: std::string::FromUtf8Error) -> Self {
+        Self::UTF8Decode(prev)
+    }
+}
+
+/// Functions
+impl Repository {
+    /// Return config value for specified key
+    ///
+    /// # Errors
+    ///
+    /// See [`CommitError`]
+    ///
+    /// # Panics
+    ///
+    /// When `git-commit(1)` fails to execute
+    pub fn commit(&self, message: &str) -> Result<(), CommitError> {
+        if self.is_bare() {
+            return Err(CommitError::BareRepository);
+        }
+        let out = self
+            .git()
+            .args(&["commit", "-m", message])
+            .output()
+            .unwrap();
+        if out.status.code().unwrap() != 0 {
+            let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
+            let code = out.status.code().unwrap_or(1);
+            return Err(CommitError::Failure(msg, code));
+        }
+        Ok(())
+    }
+    /// Return config value for specified key
+    ///
+    /// # Errors
+    ///
+    /// When given invalid key or an invalid config file is read.
+    ///
+    /// # Panics
+    ///
+    /// Will panic if git exits with an unexpected error code. Expected codes are 0, 1 & 3.
+    pub fn config(&self, key: &str) -> Result<String, ConfigReadError> {
+        let out = self
+            .git()
+            .arg("config")
+            .arg(key)
+            .output()
+            .expect("Failed to execute git-config(1)");
+        if out.status.success() {
+            Ok(String::from_utf8(out.stdout)
+                .expect("UTF-8 encoding")
+                .trim()
+                .to_string())
+        } else {
+            match out.status.code().unwrap() {
+                1 => Err(ConfigReadError::InvalidSectionOrKey(key.to_owned())),
+                3 => {
+                    let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
+                    Err(ConfigReadError::InvalidConfigFile(msg))
+                }
+                _ => {
+                    let msg = String::from_utf8_lossy(out.stderr.as_ref());
+                    panic!("Unexpected git-config(1) failure:\n{}", msg);
+                }
+            }
+        }
+    }
+
+    /// Read file from workspace or use `git-show(1)` if bare repository
+    ///
+    /// # Panics
+    ///
+    /// When UTF-8 encoding path fails
+    ///
+    /// # Errors
+    ///
+    /// When fails throws [`std::io::Error`]
+    pub fn hack_read_file(&self, path: &Path) -> std::io::Result<Vec<u8>> {
+        match self {
+            Self::Normal { work_tree, .. } => {
+                let absolute_path = work_tree.0.join(path);
+                std::fs::read(absolute_path)
+            }
+            Self::Bare { .. } => {
+                let path = format!(":{}", path.to_str().expect("UTF-8 string"));
+                let mut cmd = self.git();
+                cmd.args(&["show", &path]);
+                let out = cmd.output().expect("Failed to execute git-show(1)");
+                if out.status.success() {
+                    Ok(out.stdout)
+                } else if out.status.code().unwrap() == 128 {
+                    let msg = format!("Failed to read file: {:?}", path);
+                    Err(std::io::Error::new(std::io::ErrorKind::NotFound, msg))
+                } else {
+                    let msg = String::from_utf8_lossy(out.stderr.as_ref());
+                    Err(std::io::Error::new(std::io::ErrorKind::Other, msg))
+                }
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn is_ancestor(&self, first: &str, second: &str) -> bool {
+        let args = vec!["merge-base", "--is-ancestor", first, second];
+        let mut cmd = self.git();
+        cmd.args(args);
+        let proc = cmd.output().expect("Failed to run git-merge-base(1)");
+        proc.status.success()
+    }
+
+    /// # Errors
+    ///
+    /// See [`RefSearchError`]
+    pub fn remote_ref_to_id(&self, remote: &str, git_ref: &str) -> Result<String, RefSearchError> {
+        let proc = self.git().args(&["ls-remote", remote, git_ref]).output()?;
+        if !proc.status.success() {
+            let msg = String::from_utf8_lossy(proc.stderr.as_ref()).to_string();
+            return Err(RefSearchError::Failure(msg));
+        }
+        let stdout = String::from_utf8(proc.stdout)?;
+        if let Some(first_line) = stdout.lines().next() {
+            if let Some(id) = first_line.split('\t').next() {
+                return Ok(id.to_string());
+            }
+            return Err(RefSearchError::ParsingFailure(first_line.to_string()));
+        }
+
+        Err(RefSearchError::NotFound)
+    }
+
+    /// # Errors
+    ///
+    /// When fails will return a String describing the issue.
+    ///
+    /// # Panics
+    ///
+    /// When git-sparse-checkout(1) execution fails
+    pub fn sparse_checkout_add(&self, pattern: &str) -> Result<(), String> {
+        let out = self
+            .git()
+            .args(["sparse-checkout", "add"])
+            .arg(pattern)
+            .output()
+            .expect("Failed to execute git sparse-checkout");
+
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(out.stderr.as_ref()).to_string())
+        }
+    }
+
+    /// # Errors
+    ///
+    /// See [`StagingError`]
+    ///
+    /// # Panics
+    ///
+    /// Panics if fails to execute `git-add(1)`
+    pub fn stage(&self, path: &Path) -> Result<(), StagingError> {
+        if self.is_bare() {
+            return Err(StagingError::BareRepository);
+        }
+
+        let path = if path.is_absolute() {
+            path.strip_prefix(self.work_tree().unwrap()).unwrap()
+        } else {
+            path
+        };
+
+        let file;
+        match path.to_str() {
+            Some(f) => file = f,
+            _ => return Err(StagingError::UTF8Decode(path.to_path_buf())),
+        }
+        let out = self.git().args(&["add", "--", file]).output().unwrap();
+        match out.status.code().unwrap() {
+            0 => Ok(()),
+            128 => Err(StagingError::FileDoesNotExist(path.to_path_buf())),
+            e => {
+                let msg = String::from_utf8_lossy(&out.stdout).to_string();
+                Err(StagingError::Failure(msg, e))
+            }
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Fails if current repo is bare or dirty. In error cases see the provided string.
+    ///
+    /// # Panics
+    ///
+    /// When git-subtree(1) execution fails
+    pub fn subtree_add(
+        &self,
+        url: &str,
+        prefix: &str,
+        revision: &str,
+        message: &str,
+    ) -> Result<(), SubtreeAddError> {
+        if self.is_bare() {
+            return Err(SubtreeAddError::BareRepository);
+        }
+
+        if !self.is_clean() {
+            return Err(SubtreeAddError::WorkTreeDirty);
+        }
+
+        let args = vec!["-q", "-P", prefix, url, revision, "-m", message];
+        let mut cmd = self.git();
+        cmd.arg("subtree").arg("add").args(args);
+        let out = cmd.output().expect("Failed to execute git-subtree(1)");
+        if out.status.success() {
+            Ok(())
+        } else {
+            let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
+            let code = out.status.code().unwrap_or(1);
+            Err(SubtreeAddError::Failure(msg, code))
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Fails if current repo is bare or dirty. In error cases see the provided string.
+    ///
+    /// # Panics
+    ///
+    /// When git-subtree(1) execution fails
+    pub fn subtree_split(&self, prefix: &str) -> Result<(), SubtreeSplitError> {
+        if self.is_bare() {
+            return Err(SubtreeSplitError::BareRepository);
+        }
+
+        if !self.is_clean() {
+            return Err(SubtreeSplitError::WorkTreeDirty);
+        }
+
+        let args = vec!["-P", prefix, "--rejoin", "HEAD"];
+        let mut cmd = self.git();
+        cmd.arg("subtree").arg("split").args(args);
+        let out = cmd.output().expect("Failed to execute git-subtree(1)");
+
+        if out.status.success() {
+            Ok(())
+        } else {
+            let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
+            let code = out.status.code().unwrap_or(1);
+            Err(SubtreeSplitError::Failure(msg, code))
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Fails if current repo is bare or dirty. In error cases see the provided string.
+    ///
+    /// # Panics
+    ///
+    /// When git-subtree(1) execution fails
+    pub fn subtree_pull(
+        &self,
+        remote: &str,
+        prefix: &str,
+        git_ref: &str,
+        message: &str,
+    ) -> Result<(), SubtreePullError> {
+        if self.is_bare() {
+            return Err(SubtreePullError::BareRepository);
+        }
+
+        if !self.is_clean() {
+            return Err(SubtreePullError::WorkTreeDirty);
+        }
+
+        let args = vec!["-q", "-P", prefix, remote, git_ref, "-m", message];
+        let mut cmd = self.git();
+        cmd.arg("subtree").arg("pull").args(args);
+        let out = cmd.output().expect("Failed to execute git-subtree(1)");
+        if out.status.success() {
+            Ok(())
+        } else {
+            let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
+            let code = out.status.code().unwrap_or(1);
+            Err(SubtreePullError::Failure(msg, code))
+        }
+    }
+
+    /// # Errors
+    ///
+    /// Fails if current repo is bare. In other error cases see the provided message string.
+    pub fn subtree_push(
+        &self,
+        remote: &str,
+        prefix: &str,
+        git_ref: &str,
+    ) -> Result<(), SubtreePushError> {
+        if self.is_bare() {
+            return Err(SubtreePushError::BareRepository);
+        }
+
+        let args = vec!["subtree", "push", "-q", "-P", prefix, remote, git_ref];
+        let mut cmd = self.git();
+        cmd.arg("subtree").arg("push").args(args);
+        let out = cmd.output().expect("Failed to execute git-subtree(1)");
+        if out.status.success() {
+            Ok(())
+        } else {
+            let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
+            let code = out.status.code().unwrap_or(1);
+            Err(SubtreePushError::Failure(msg, code))
+        }
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum InvalidCommitishError {
+    #[error("Invalid reference or commit id: `{0}`")]
+    One(String),
+    #[error("One or Multiple invalid reference or commit ids: `{0:?}`")]
+    Multiple(Vec<String>),
+}
+
+/// Commit Functions
+impl Repository {
+    ///  Find best common ancestor between to commits.
+    ///
+    /// # Errors
+    ///
+    /// Will return `InvalidCommitishError::Multiple` when one or multiple provided ids do not
+    /// exist
+    ///
+    /// # Panics
+    ///
+    /// When exit code of git-merge-base(1) is not 0 or 128
+    pub fn merge_base(&self, ids: &[&str]) -> Result<Option<String>, InvalidCommitishError> {
+        let output = self
+            .git()
+            .arg("merge-base")
+            .args(ids)
+            .output()
+            .expect("Executing git-merge-base(1)");
+        if output.status.success() {
+            let tmp = String::from_utf8_lossy(&output.stdout);
+            if tmp.is_empty() {
+                return Ok(None);
+            }
+            let result = tmp.trim_end();
+            return Ok(Some(result.to_string()));
+        }
+        match output.status.code().expect("Getting status code") {
+            128 => {
+                let tmp = ids.to_vec();
+                let e_ids = tmp.iter().map(ToString::to_string).collect();
+                Err(InvalidCommitishError::Multiple(e_ids))
+            }
+            code => {
+                panic!("Unexpected error code for merge-base: {}", code);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[cfg(not(tarpaulin_include))]
+mod test {
+
+    // https://stackoverflow.com/a/63904992
+    macro_rules! function {
+        () => {{
+            fn f() {}
+            fn type_name_of<T>(_: T) -> &'static str {
+                std::any::type_name::<T>()
+            }
+            let name = type_name_of(f);
+
+            // Find and cut the rest of the path
+            match &name[..name.len() - 3].rfind(':') {
+                Some(pos) => &name[pos + 1..name.len() - 3],
+                None => &name[..name.len() - 3],
+            }
+        }};
+    }
+
+    mod repository_initialization {
+        use crate::{RepoError, Repository};
+        use tempdir::TempDir;
+
+        #[test]
+        fn git_dir_not_found() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let discovery_path = tmp_dir.path();
+            let actual = Repository::discover(discovery_path);
+            assert!(actual.is_err(), "Fail to find repo in an empty directory");
+            let actual = actual.err().unwrap();
+            assert!(actual == RepoError::GitDirNotFound);
+            tmp_dir.close().unwrap();
+        }
+
+        #[test]
+        fn bare_repo() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create_bare(repo_path).unwrap();
+            assert!(
+                match repo {
+                    Repository::Normal { .. } => false,
+                    Repository::Bare { .. } => true,
+                },
+                "Expected a bare repo"
+            );
+
+            assert_eq!(
+                repo.work_tree(),
+                None,
+                "Bare repo should not have a work-tree"
+            );
+            tmp_dir.close().unwrap();
+        }
+
+        #[test]
+        fn normal_repo() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+
+            assert!(
+                match repo {
+                    Repository::Normal { .. } => true,
+                    Repository::Bare { .. } => false,
+                },
+                "Expected a non-bare repo"
+            );
+
+            assert_ne!(
+                repo.work_tree(),
+                None,
+                "Non-Bare repo should have a work-tree"
+            );
+            tmp_dir.close().unwrap();
+        }
+    }
+
+    mod is_bare {
+        use crate::Repository;
+        use tempdir::TempDir;
+
+        #[test]
+        fn yes() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create_bare(repo_path).unwrap();
+            assert!(repo.is_bare(), "Expected a bare repository");
+
+            tmp_dir.close().unwrap();
+        }
+
+        #[test]
+        fn no() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            assert!(!repo.is_bare(), "Expected a non-bare repository");
+
+            tmp_dir.close().unwrap();
+        }
+    }
+
+    mod config {
+        use crate::Repository;
+        use tempdir::TempDir;
+
+        #[test]
+        fn config() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create_bare(repo_path).unwrap();
+            let actual = repo.config("core.bare").unwrap();
+            assert_eq!(actual, "true".to_string(), "Expected true");
+
+            tmp_dir.close().unwrap();
+        }
+    }
+
+    mod sparse_checkout {
+        use crate::Repository;
+        use std::process::Command;
+        use tempdir::TempDir;
+
+        #[test]
+        fn is_sparse() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            let mut cmd = Command::new("git");
+            let out = cmd
+                .args(&["sparse-checkout", "init"])
+                .current_dir(repo_path)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "Try to make repository sparse");
+            assert!(repo.is_sparse(), "Not sparse repository")
+        }
+
+        #[test]
+        fn not_sparse() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            assert!(!repo.is_sparse(), "Not sparse repository")
+        }
+
+        #[test]
+        fn add() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            repo.git()
+                .args(["sparse-checkout", "init"])
+                .output()
+                .unwrap();
+            let actual = repo.sparse_checkout_add("foo/bar");
+            assert!(actual.is_ok(), "Expected successfull execution");
+
+            tmp_dir.close().unwrap();
+        }
+    }
+
+    mod subtree_add {
+        use crate::{Repository, SubtreeAddError};
+        use tempdir::TempDir;
+
+        #[test]
+        fn bare_repo() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create_bare(repo_path).unwrap();
+            let actual =
+                repo.subtree_add("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
+            assert!(actual.is_err(), "Expected an error");
+            let actual = actual.unwrap_err();
+            assert_eq!(actual, SubtreeAddError::BareRepository);
+            tmp_dir.close().unwrap();
+        }
+
+        #[test]
+        fn dirty_work_tree() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            let actual =
+                repo.subtree_add("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
+            assert!(actual.is_err(), "Expected an error");
+            let actual = actual.unwrap_err();
+            assert_eq!(actual, SubtreeAddError::WorkTreeDirty);
+            tmp_dir.close().unwrap();
+        }
+
+        #[test]
+        fn successfull() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            let readme = repo_path.join("README.md");
+            std::fs::File::create(&readme).unwrap();
+            std::fs::write(&readme, "# README").unwrap();
+            repo.stage(&readme).unwrap();
+            repo.commit("Test").unwrap();
+            let actual = repo.subtree_add(
+                "https://github.com/kalkin/file-expert",
+                "bar",
+                "HEAD",
+                "Some Message",
+            );
+            assert!(actual.is_ok(), "Failure to add subtree");
+        }
+    }
+
+    mod subtree_pull {
+        use crate::{Repository, SubtreePullError};
+        use tempdir::TempDir;
+
+        #[test]
+        fn bare_repo() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create_bare(repo_path).unwrap();
+            let actual =
+                repo.subtree_pull("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
+            assert!(actual.is_err(), "Expected an error");
+            let actual = actual.unwrap_err();
+            assert_eq!(actual, SubtreePullError::BareRepository);
+            tmp_dir.close().unwrap();
+        }
+
+        #[test]
+        fn dirty_work_tree() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            let actual =
+                repo.subtree_pull("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
+            assert!(actual.is_err(), "Expected an error");
+            let actual = actual.unwrap_err();
+            assert_eq!(actual, SubtreePullError::WorkTreeDirty);
+            tmp_dir.close().unwrap();
+        }
+
+        #[test]
+        fn successfull() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            let readme = repo_path.join("README.md");
+            std::fs::File::create(&readme).unwrap();
+            std::fs::write(&readme, "# README").unwrap();
+            repo.stage(&readme).unwrap();
+            repo.commit("Test").unwrap();
+            repo.subtree_add(
+                "https://github.com/kalkin/file-expert",
+                "bar",
+                "v0.10.1",
+                "Some Message",
+            )
+            .unwrap();
+
+            let actual = repo.subtree_pull(
+                "https://github.com/kalkin/file-expert",
+                "bar",
+                "v0.13.1",
+                "Some message",
+            );
+            assert!(actual.is_ok(), "Failure to pull subtree");
+        }
+    }
+
+    mod remote_ref_resolution {
+        use crate::RefSearchError;
+        use crate::Repository;
+        use tempdir::TempDir;
+
+        #[test]
+        fn not_found() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            let result =
+                repo.remote_ref_to_id("https://github.com/kalkin/file-expert", "v230.40.50");
+            assert!(result.is_err());
+            let actual = matches!(result.unwrap_err(), RefSearchError::NotFound);
+            assert!(actual, "should not find v230.40.50")
+        }
+
+        #[test]
+        fn failure() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            let result = repo.remote_ref_to_id("https://example.com/asd/foo", "v230.40.50");
+            assert!(result.is_err());
+            let actual = matches!(result.unwrap_err(), RefSearchError::Failure(_));
+            assert!(actual, "should not find any repo")
+        }
+
+        #[test]
+        fn successfull_search() {
+            let tmp_dir = TempDir::new(function!()).unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+            let result = repo.remote_ref_to_id("https://github.com/kalkin/file-expert", "v0.9.0");
+            assert!(result.is_ok());
+            let actual = result.unwrap();
+            let expected = "24f624a0268f6cbcfc163abef5f3acbc6c11085e".to_string();
+            assert_eq!(expected, actual, "Find commit id for v0.9.0")
+        }
     }
 }
