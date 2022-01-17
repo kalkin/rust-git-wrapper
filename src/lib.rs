@@ -918,7 +918,7 @@ impl Repository {
 
         let args = vec!["subtree", "push", "-q", "-P", prefix, remote, git_ref];
         let mut cmd = self.git();
-        cmd.arg("subtree").arg("push").args(args);
+        cmd.args(args);
         let out = cmd.output().expect("Failed to execute git-subtree(1)");
         if out.status.success() {
             Ok(())
