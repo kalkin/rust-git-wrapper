@@ -205,11 +205,15 @@ pub enum Repository {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 pub enum RepoError {
+    #[error("GIT_DIR Not found")]
     GitDirNotFound,
+    #[error("Invalid directory: `{0}`")]
     InvalidDirectory(PathBuf),
+    #[error("Failed to canonicalize the path buffer: `{0}`")]
     AbsolutionError(PathBuf),
+    #[error("Failed to access current working directory")]
     FailAccessCwd,
 }
 
