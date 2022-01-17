@@ -12,7 +12,7 @@ repository = "https://github.com/kalkin/rust-git-wrapper"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-posix-errors = { path = "../posix-errors", version = "^1.1.1" }
+posix-errors = { path = "../posix-errors", version = "^1.2" }
 thiserror = "1"
 
 [dev-dependencies]
