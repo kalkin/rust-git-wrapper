@@ -175,7 +175,7 @@ fn cwd() -> Result<PathBuf, RepoError> {
 pub struct AbsoluteDirPath(PathBuf);
 
 impl AbsoluteDirPath {
-    fn new(path: &Path) -> Result<AbsoluteDirPath, RepoError> {
+    fn new(path: &Path) -> Result<Self, RepoError> {
         let path_buf;
         if path.is_absolute() {
             path_buf = path.to_path_buf();
@@ -185,7 +185,7 @@ impl AbsoluteDirPath {
             return Err(RepoError::AbsolutionError(path.to_path_buf()));
         }
 
-        Ok(AbsoluteDirPath(path_buf))
+        Ok(Self(path_buf))
     }
 }
 
@@ -423,7 +423,7 @@ impl Repository {
     ///
     /// Will return [`RepoError`] when fails to find repository
     pub fn default() -> Result<Self, RepoError> {
-        Repository::from_args(None, None, None)
+        Self::from_args(None, None, None)
     }
 
     #[must_use]
@@ -448,7 +448,7 @@ impl Repository {
         if out.status.success() {
             let work_tree = AbsoluteDirPath::new(path).unwrap();
             let git_dir = AbsoluteDirPath::new(&path.join(".git")).unwrap();
-            Ok(Repository::Normal { git_dir, work_tree })
+            Ok(Self::Normal { git_dir, work_tree })
         } else {
             Err(String::from_utf8_lossy(&out.stderr).to_string())
         }
@@ -472,7 +472,7 @@ impl Repository {
 
         if out.status.success() {
             let git_dir = AbsoluteDirPath::new(path).unwrap();
-            Ok(Repository::Bare { git_dir })
+            Ok(Self::Bare { git_dir })
         } else {
             Err(String::from_utf8_lossy(&out.stderr).to_string())
         }
@@ -500,7 +500,7 @@ impl Repository {
                     work_tree_from_git_dir(&git_dir)?
                 };
 
-                Ok(Repository::new(git_dir, work_tree))
+                Ok(Self::new(git_dir, work_tree))
             }
             (_, _, _) => {
                 let root = change.map_or_else(PathBuf::new, PathBuf::from);
@@ -508,7 +508,7 @@ impl Repository {
                     (Some(g_dir), None) => {
                         let git_dir = AbsoluteDirPath::new(&root.join(g_dir))?;
                         let work_tree = work_tree_from_git_dir(&git_dir)?;
-                        Ok(Repository::new(git_dir, work_tree))
+                        Ok(Self::new(git_dir, work_tree))
                     }
                     (None, Some(w_dir)) => {
                         let work_tree = AbsoluteDirPath::new(&root.join(w_dir))?;
@@ -523,7 +523,7 @@ impl Repository {
                     (None, None) => {
                         let git_dir = search_git_dir(&root)?;
                         let work_tree = work_tree_from_git_dir(&git_dir)?;
-                        Ok(Repository::new(git_dir, work_tree))
+                        Ok(Self::new(git_dir, work_tree))
                     }
                 }
             }
