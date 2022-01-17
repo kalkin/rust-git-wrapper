@@ -975,6 +975,7 @@ impl Repository {
                 let e_ids = tmp.iter().map(ToString::to_string).collect();
                 Err(InvalidCommitishError::Multiple(e_ids))
             }
+            1 => Ok(None),
             code => {
                 panic!("Unexpected error code for merge-base: {}", code);
             }
