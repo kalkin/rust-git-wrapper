@@ -307,7 +307,7 @@ impl Repository {
         if !out.status.success() {
             eprintln!(
                 "Failed to execute git-remote(1):\n{}",
-                String::from_utf8_lossy(&out.stderr).to_string()
+                String::from_utf8_lossy(&out.stderr)
             );
             return None;
         }
