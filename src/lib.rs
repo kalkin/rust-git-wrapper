@@ -162,6 +162,19 @@ pub struct Remote {
     pub fetch: Option<String>,
 }
 
+impl Remote {
+    #[must_use]
+    pub fn url(&self) -> Option<&String> {
+        if let Some(s) = &self.fetch {
+            return Some(s);
+        } else if let Some(s) = &self.push {
+            return Some(s);
+        }
+
+        None
+    }
+}
+
 fn cwd() -> Result<PathBuf, RepoError> {
     if let Ok(result) = std::env::current_dir() {
         Ok(result)
