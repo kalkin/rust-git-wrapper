@@ -2,7 +2,7 @@
 name = "git-wrapper"
 version = "0.5.1"
 authors = ["Bahtiar `kalkin-` Gadimov <bahtiar@gadimov.de>"]
-edition = "2018"
+edition = "2021"
 description="Simple handy wrappers around git commands"
 readme = "README.md"
 keywords = ["git"]
