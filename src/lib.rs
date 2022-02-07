@@ -352,7 +352,7 @@ impl Repository {
         let out = cmd
             .args(args)
             .output()
-            .expect("Failed to execute git-commit(1)");
+            .expect("Failed to execute git-rev-parse(1)");
         if !out.status.success() {
             return None;
         }
