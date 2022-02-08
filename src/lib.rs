@@ -356,7 +356,7 @@ impl Repository {
         if !out.status.success() {
             return None;
         }
-        let result = String::from_utf8_lossy(&out.stdout).to_string();
+        let result = String::from_utf8_lossy(&out.stdout).trim().to_string();
         Some(result)
     }
 
