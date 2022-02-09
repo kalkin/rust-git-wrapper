@@ -861,14 +861,25 @@ impl Repository {
         let args = vec!["-P", prefix, "--rejoin", "HEAD"];
         let mut cmd = self.git();
         cmd.arg("subtree").arg("split").args(args);
-        let out = cmd.output().expect("Failed to execute git-subtree(1)");
-
-        if out.status.success() {
-            Ok(())
-        } else {
-            let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
-            let code = out.status.code().unwrap_or(1);
-            Err(SubtreeSplitError::Failure(msg, code))
+        let result = cmd
+            .spawn()
+            .expect("Failed to execute git-subtree(1)")
+            .wait();
+        match result {
+            Ok(code) => {
+                if code.success() {
+                    Ok(())
+                } else {
+                    Err(SubtreeSplitError::Failure(
+                        "git-subtree split failed".to_string(),
+                        1,
+                    ))
+                }
+            }
+            Err(e) => {
+                let msg = format!("{}", e);
+                Err(SubtreeSplitError::Failure(msg, 1))
+            }
         }
     }
 
