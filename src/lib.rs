@@ -27,6 +27,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::Output;
 
+pub mod x;
+
 macro_rules! cmd {
     ($args:expr) => {
         Command::new("git").args($args).output()
@@ -596,7 +598,6 @@ pub enum StagingError {
 #[derive(Debug)]
 pub enum CommitError {
     Failure(String, i32),
-    UTF8Decode(PathBuf),
     BareRepository,
 }
 
