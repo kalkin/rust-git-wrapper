@@ -591,8 +591,6 @@ pub enum StagingError {
     BareRepository,
     Failure(String, i32),
     FileDoesNotExist(PathBuf),
-    InvalidPath(PathBuf),
-    UTF8Decode(PathBuf),
 }
 
 #[derive(Debug)]
@@ -792,12 +790,8 @@ impl Repository {
             path
         };
 
-        let file;
-        match path.to_str() {
-            Some(f) => file = f,
-            _ => return Err(StagingError::UTF8Decode(path.to_path_buf())),
-        }
-        let out = self.git().args(&["add", "--", file]).output().unwrap();
+        let file = path.as_os_str();
+        let out = self.git().args(&["add", "--"]).arg(file).output().unwrap();
         match out.status.code().unwrap() {
             0 => Ok(()),
             128 => Err(StagingError::FileDoesNotExist(path.to_path_buf())),
