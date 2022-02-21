@@ -1015,7 +1015,6 @@ impl Repository {
 }
 
 #[cfg(test)]
-#[cfg(not(tarpaulin_include))]
 mod test {
 
     // https://stackoverflow.com/a/63904992
