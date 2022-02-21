@@ -21,7 +21,7 @@
 #![allow(unknown_lints)]
 #![warn(clippy::all)]
 
-pub use posix_errors::PosixError;
+pub use posix_errors::{PosixError, EACCES, EINVAL, ENOENT};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -217,6 +217,17 @@ pub enum RepoError {
     AbsolutionError(PathBuf),
     #[error("Failed to access current working directory")]
     FailAccessCwd,
+}
+
+impl From<RepoError> for PosixError {
+    fn from(e: RepoError) -> Self {
+        let msg = format!("{}", e);
+        match e {
+            RepoError::GitDirNotFound | RepoError::InvalidDirectory(_) => Self::new(ENOENT, msg),
+            RepoError::AbsolutionError(_) => Self::new(EINVAL, msg),
+            RepoError::FailAccessCwd => Self::new(EACCES, msg),
+        }
+    }
 }
 
 fn search_git_dir(start: &Path) -> Result<AbsoluteDirPath, RepoError> {
@@ -586,11 +597,25 @@ pub enum ConfigReadError {
     InvalidConfigFile(String),
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum StagingError {
+    #[error("Bare repository")]
     BareRepository,
+    #[error("`{0}`")]
     Failure(String, i32),
+    #[error("File does not exist: `{0}`")]
     FileDoesNotExist(PathBuf),
+}
+
+impl From<StagingError> for PosixError {
+    fn from(e: StagingError) -> Self {
+        let msg = format!("{}", e);
+        match e {
+            StagingError::BareRepository => Self::new(1, msg),
+            StagingError::FileDoesNotExist(_) => Self::new(ENOENT, msg),
+            StagingError::Failure(_, code) => Self::new(code, msg),
+        }
+    }
 }
 
 #[derive(Debug)]
