@@ -455,6 +455,7 @@ impl Repository {
 
     #[must_use]
     #[inline]
+    #[allow(clippy::shadow_reuse)]
     pub fn new(git_dir: AbsoluteDirPath, work_tree: Option<AbsoluteDirPath>) -> Self {
         match work_tree {
             Some(work_tree) => Self::Normal { git_dir, work_tree },
@@ -569,9 +570,8 @@ impl Repository {
         cmd.env("GIT_DIR", git_dir);
 
         if let Self::Normal { work_tree, .. } = self {
-            let work_tree = work_tree.0.to_str().expect("Convert to string");
-            cmd.env("GIT_WORK_TREE", work_tree);
-            cmd.current_dir(work_tree);
+            cmd.env("GIT_WORK_TREE", &work_tree.0);
+            cmd.current_dir(&work_tree.0);
         }
         cmd
     }
@@ -755,14 +755,14 @@ impl Repository {
                 std::fs::read(absolute_path)
             }
             Self::Bare { .. } => {
-                let path = format!(":{}", path.to_str().expect("UTF-8 string"));
+                let file_path = format!(":{}", path.to_str().expect("UTF-8 string"));
                 let mut cmd = self.git();
-                cmd.args(&["show", &path]);
+                cmd.args(&["show", &file_path]);
                 let out = cmd.output().expect("Failed to execute git-show(1)");
                 if out.status.success() {
                     Ok(out.stdout)
                 } else if out.status.code().unwrap() == 128 {
-                    let msg = format!("Failed to read file: {:?}", path);
+                    let msg = format!("Failed to read file: {:?}", file_path);
                     Err(std::io::Error::new(std::io::ErrorKind::NotFound, msg))
                 } else {
                     let msg = String::from_utf8_lossy(out.stderr.as_ref());
@@ -839,17 +839,17 @@ impl Repository {
             return Err(StagingError::BareRepository);
         }
 
-        let path = if path.is_absolute() {
+        let relative_path = if path.is_absolute() {
             path.strip_prefix(self.work_tree().unwrap()).unwrap()
         } else {
             path
         };
 
-        let file = path.as_os_str();
+        let file = relative_path.as_os_str();
         let out = self.git().args(&["add", "--"]).arg(file).output().unwrap();
         match out.status.code().unwrap() {
             0 => Ok(()),
-            128 => Err(StagingError::FileDoesNotExist(path.to_path_buf())),
+            128 => Err(StagingError::FileDoesNotExist(relative_path.to_path_buf())),
             e => {
                 let msg = String::from_utf8_lossy(&out.stdout).to_string();
                 Err(StagingError::Failure(msg, e))
