@@ -312,8 +312,8 @@ impl Repository {
             return false;
         }
 
-        let output = self.git().args(&["rev-parse", "HEAD"]).output().unwrap();
-        output.status.success()
+        let output2 = self.git().args(&["rev-parse", "HEAD"]).output().unwrap();
+        output2.status.success()
     }
 
     #[must_use]
