@@ -351,13 +351,13 @@ impl Repository {
         }
         for remote_line in remote_lines {
             let mut remote = my_map.remove(&remote_line.name).unwrap_or(Remote {
-                name: remote_line.name.to_string(),
+                name: remote_line.name.clone(),
                 push: None,
                 fetch: None,
             });
             match remote_line.dir {
-                RemoteDir::Fetch => remote.fetch = Some(remote_line.url.to_string()),
-                RemoteDir::Push => remote.push = Some(remote_line.url.to_string()),
+                RemoteDir::Fetch => remote.fetch = Some(remote_line.url.clone()),
+                RemoteDir::Push => remote.push = Some(remote_line.url.clone()),
             }
             my_map.insert(remote_line.name.clone(), remote);
         }
