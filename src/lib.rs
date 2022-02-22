@@ -297,7 +297,7 @@ pub struct InvalidRefError;
 impl Repository {
     #[must_use]
     #[inline]
-    pub fn is_bare(&self) -> bool {
+    pub const fn is_bare(&self) -> bool {
         matches!(self, Self::Bare { .. })
     }
 
@@ -399,13 +399,13 @@ impl Repository {
         path.exists()
     }
 
-    fn git_dir(&self) -> &AbsoluteDirPath {
+    const fn git_dir(&self) -> &AbsoluteDirPath {
         match self {
             Self::Normal { git_dir, .. } | Self::Bare { git_dir } => git_dir,
         }
     }
 
-    fn git_dir_path(&self) -> &PathBuf {
+    const fn git_dir_path(&self) -> &PathBuf {
         match self {
             Self::Normal { git_dir, .. } | Self::Bare { git_dir } => &git_dir.0,
         }
@@ -455,7 +455,7 @@ impl Repository {
 
     #[must_use]
     #[inline]
-    #[allow(clippy::shadow_reuse)]
+    #[allow(clippy::shadow_reuse, clippy::missing_const_for_fn)]
     pub fn new(git_dir: AbsoluteDirPath, work_tree: Option<AbsoluteDirPath>) -> Self {
         match work_tree {
             Some(work_tree) => Self::Normal { git_dir, work_tree },
