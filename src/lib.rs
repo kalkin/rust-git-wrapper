@@ -544,8 +544,8 @@ impl Repository {
     }
 
     #[must_use]
-    pub fn git(&self) -> std::process::Command {
-        let mut cmd = std::process::Command::new("git");
+    pub fn git(&self) -> Command {
+        let mut cmd = Command::new("git");
         let git_dir = self.git_dir().0.to_str().expect("Convert to string");
         cmd.env("GIT_DIR", git_dir);
 
@@ -557,7 +557,7 @@ impl Repository {
         cmd
     }
 
-    pub fn git_in_dir<P: AsRef<Path>>(&self, path: P) -> std::process::Command {
+    pub fn git_in_dir<P: AsRef<Path>>(&self, path: P) -> Command {
         let mut cmd = self.git();
         cmd.current_dir(path);
         cmd
