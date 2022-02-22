@@ -143,7 +143,7 @@ pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
         return Ok(split
             .next()
             .expect("Failed to parse default branch")
-            .to_string());
+            .to_owned());
     }
 
     Err(PosixError::from(proc))
@@ -338,10 +338,10 @@ impl Repository {
         let mut remote_lines: Vec<RemoteLine> = vec![];
         for line in text.lines() {
             let mut split = line.trim().split('\t');
-            let name = split.next().expect("Remote name").to_string();
+            let name = split.next().expect("Remote name").to_owned();
             let rest = split.next().expect("Remote rest");
             let mut rest_split = rest.split(' ');
-            let url = rest_split.next().expect("Remote url").to_string();
+            let url = rest_split.next().expect("Remote url").to_owned();
             let dir = if rest_split.next().expect("Remote direction") == "(fetch)" {
                 RemoteDir::Fetch
             } else {
@@ -378,7 +378,7 @@ impl Repository {
         if !out.status.success() {
             return None;
         }
-        let result = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let result = String::from_utf8_lossy(&out.stdout).trim().to_owned();
         Some(result)
     }
 
@@ -722,7 +722,7 @@ impl Repository {
             Ok(String::from_utf8(out.stdout)
                 .expect("UTF-8 encoding")
                 .trim()
-                .to_string())
+                .to_owned())
         } else {
             match out.status.code().unwrap() {
                 1 => Err(ConfigReadError::InvalidSectionOrKey(key.to_owned())),
@@ -795,9 +795,9 @@ impl Repository {
         let stdout = String::from_utf8(proc.stdout)?;
         if let Some(first_line) = stdout.lines().next() {
             if let Some(id) = first_line.split('\t').next() {
-                return Ok(id.to_string());
+                return Ok(id.to_owned());
             }
-            return Err(RefSearchError::ParsingFailure(first_line.to_string()));
+            return Err(RefSearchError::ParsingFailure(first_line.to_owned()));
         }
 
         Err(RefSearchError::NotFound)
@@ -923,7 +923,7 @@ impl Repository {
                     Ok(())
                 } else {
                     Err(SubtreeSplitError::Failure(
-                        "git-subtree split failed".to_string(),
+                        "git-subtree split failed".to_owned(),
                         1,
                     ))
                 }
@@ -1033,7 +1033,7 @@ impl Repository {
                 return Ok(None);
             }
             let result = tmp.trim_end();
-            return Ok(Some(result.to_string()));
+            return Ok(Some(result.to_owned()));
         }
         match output.status.code().expect("Getting status code") {
             128 => {
