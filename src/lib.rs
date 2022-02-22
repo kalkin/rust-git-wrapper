@@ -43,6 +43,7 @@ macro_rules! cmd {
 /// # Errors
 ///
 /// Will return [`PosixError`] if command exits with an error code.
+#[inline]
 pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
     let result = cmd!("ls-remote", args);
 
@@ -58,6 +59,7 @@ pub fn ls_remote(args: &[&str]) -> Result<Output, PosixError> {
 /// # Errors
 ///
 /// Will return [`PosixError`] if command exits with an error code.
+#[inline]
 pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     let mut vec = Vec::new();
     let output = ls_remote(&["--refs", "--tags", url])?;
@@ -91,6 +93,7 @@ pub enum ConfigSetError {
 /// # Panics
 ///
 /// When git-config(1) execution fails
+#[inline]
 pub fn config_file_set(file: &Path, key: &str, value: &str) -> Result<(), ConfigSetError> {
     let args = &["--file", file.to_str().expect("UTF-8 encoding"), key, value];
     let mut cmd = Command::new("git");
@@ -122,6 +125,7 @@ pub fn config_file_set(file: &Path, key: &str, value: &str) -> Result<(), Config
 ///
 /// Will return [`PosixError`] if command exits with an error code.
 /// TODO Return a custom error type
+#[inline]
 pub fn resolve_head(remote: &str) -> Result<String, PosixError> {
     let proc =
         cmd!("ls-remote", vec!["--symref", remote, "HEAD"]).expect("Failed to execute git command");
@@ -220,6 +224,7 @@ pub enum RepoError {
 }
 
 impl From<RepoError> for PosixError {
+    #[inline]
     fn from(e: RepoError) -> Self {
         let msg = format!("{}", e);
         match e {
@@ -291,6 +296,7 @@ pub struct InvalidRefError;
 /// Getters
 impl Repository {
     #[must_use]
+    #[inline]
     pub fn is_bare(&self) -> bool {
         matches!(self, Self::Bare { .. })
     }
@@ -299,6 +305,7 @@ impl Repository {
     ///
     /// Panics of executing git-diff(1) fails
     #[must_use]
+    #[inline]
     pub fn is_clean(&self) -> bool {
         let output = self.git().args(&["diff", "--quiet"]).output().unwrap();
         if !output.status.success() {
@@ -310,6 +317,7 @@ impl Repository {
     }
 
     #[must_use]
+    #[inline]
     pub fn remotes(&self) -> Option<HashMap<String, Remote>> {
         let args = &["remote", "-v"];
         let mut cmd = self.git();
@@ -359,6 +367,7 @@ impl Repository {
 
     // TODO return a Result with custom error type
     #[must_use]
+    #[inline]
     pub fn head(&self) -> Option<String> {
         let args = &["rev-parse", "HEAD"];
         let mut cmd = self.git();
@@ -374,6 +383,7 @@ impl Repository {
     }
 
     #[must_use]
+    #[inline]
     pub fn work_tree(&self) -> Option<PathBuf> {
         match self {
             Self::Normal { work_tree, .. } => Some(work_tree.0.clone()),
@@ -383,6 +393,7 @@ impl Repository {
 
     /// Return true if the repo is sparse
     #[must_use]
+    #[inline]
     pub fn is_sparse(&self) -> bool {
         let path = self.git_dir_path().join("info").join("sparse-checkout");
         path.exists()
@@ -403,6 +414,7 @@ impl Repository {
     /// # Errors
     ///
     /// Will return [`InvalidRefError`] if invalid reference provided
+    #[inline]
     pub fn short_ref(&self, long_ref: &str) -> Result<String, InvalidRefError> {
         let args = vec!["rev-parse", "--short", long_ref];
         let mut cmd = self.git();
@@ -424,6 +436,7 @@ impl Repository {
     /// # Errors
     ///
     /// Will return [`RepoError`] when fails to find repository
+    #[inline]
     pub fn discover(path: &Path) -> Result<Self, RepoError> {
         let git_dir = search_git_dir(path)?;
         if let Some(work_tree) = work_tree_from_git_dir(&git_dir)? {
@@ -435,11 +448,13 @@ impl Repository {
     /// # Errors
     ///
     /// Will return [`RepoError`] when fails to find repository
+    #[inline]
     pub fn default() -> Result<Self, RepoError> {
         Self::from_args(None, None, None)
     }
 
     #[must_use]
+    #[inline]
     pub fn new(git_dir: AbsoluteDirPath, work_tree: Option<AbsoluteDirPath>) -> Self {
         match work_tree {
             Some(work_tree) => Self::Normal { git_dir, work_tree },
@@ -454,6 +469,7 @@ impl Repository {
     /// # Errors
     ///
     /// Returns a string output when something goes horrible wrong
+    #[inline]
     pub fn create(path: &Path) -> Result<Self, String> {
         let mut cmd = Command::new("git");
         let out = cmd.arg("init").current_dir(&path).output().unwrap();
@@ -474,6 +490,7 @@ impl Repository {
     /// # Errors
     ///
     /// Returns a string output when something goes horrible wrong
+    #[inline]
     pub fn create_bare(path: &Path) -> Result<Self, String> {
         let mut cmd = Command::new("git");
         let out = cmd
@@ -494,6 +511,7 @@ impl Repository {
     /// # Errors
     ///
     /// Will return [`RepoError`] when fails to find repository
+    #[inline]
     pub fn from_args(
         change: Option<&str>,
         git: Option<&str>,
@@ -544,6 +562,7 @@ impl Repository {
     }
 
     #[must_use]
+    #[inline]
     pub fn git(&self) -> Command {
         let mut cmd = Command::new("git");
         let git_dir = self.git_dir().0.to_str().expect("Convert to string");
@@ -557,6 +576,7 @@ impl Repository {
         cmd
     }
 
+    #[inline]
     pub fn git_in_dir<P: AsRef<Path>>(&self, path: P) -> Command {
         let mut cmd = self.git();
         cmd.current_dir(path);
@@ -608,6 +628,7 @@ pub enum StagingError {
 }
 
 impl From<StagingError> for PosixError {
+    #[inline]
     fn from(e: StagingError) -> Self {
         let msg = format!("{}", e);
         match e {
@@ -639,12 +660,14 @@ pub enum RefSearchError {
 }
 
 impl From<std::io::Error> for RefSearchError {
+    #[inline]
     fn from(prev: std::io::Error) -> Self {
         Self::IOError(prev)
     }
 }
 
 impl From<std::string::FromUtf8Error> for RefSearchError {
+    #[inline]
     fn from(prev: std::string::FromUtf8Error) -> Self {
         Self::UTF8Decode(prev)
     }
@@ -661,6 +684,7 @@ impl Repository {
     /// # Panics
     ///
     /// When `git-commit(1)` fails to execute
+    #[inline]
     pub fn commit(&self, message: &str) -> Result<(), CommitError> {
         if self.is_bare() {
             return Err(CommitError::BareRepository);
@@ -686,6 +710,7 @@ impl Repository {
     /// # Panics
     ///
     /// Will panic if git exits with an unexpected error code. Expected codes are 0, 1 & 3.
+    #[inline]
     pub fn config(&self, key: &str) -> Result<String, ConfigReadError> {
         let out = self
             .git()
@@ -722,6 +747,7 @@ impl Repository {
     /// # Errors
     ///
     /// When fails throws [`std::io::Error`]
+    #[inline]
     pub fn hack_read_file(&self, path: &Path) -> std::io::Result<Vec<u8>> {
         match self {
             Self::Normal { work_tree, .. } => {
@@ -747,6 +773,7 @@ impl Repository {
     }
 
     #[must_use]
+    #[inline]
     pub fn is_ancestor(&self, first: &str, second: &str) -> bool {
         let args = vec!["merge-base", "--is-ancestor", first, second];
         let mut cmd = self.git();
@@ -758,6 +785,7 @@ impl Repository {
     /// # Errors
     ///
     /// See [`RefSearchError`]
+    #[inline]
     pub fn remote_ref_to_id(&self, remote: &str, git_ref: &str) -> Result<String, RefSearchError> {
         let proc = self.git().args(&["ls-remote", remote, git_ref]).output()?;
         if !proc.status.success() {
@@ -782,6 +810,7 @@ impl Repository {
     /// # Panics
     ///
     /// When git-sparse-checkout(1) execution fails
+    #[inline]
     pub fn sparse_checkout_add(&self, pattern: &str) -> Result<(), String> {
         let out = self
             .git()
@@ -804,6 +833,7 @@ impl Repository {
     /// # Panics
     ///
     /// Panics if fails to execute `git-add(1)`
+    #[inline]
     pub fn stage(&self, path: &Path) -> Result<(), StagingError> {
         if self.is_bare() {
             return Err(StagingError::BareRepository);
@@ -834,6 +864,7 @@ impl Repository {
     /// # Panics
     ///
     /// When git-subtree(1) execution fails
+    #[inline]
     pub fn subtree_add(
         &self,
         url: &str,
@@ -869,6 +900,7 @@ impl Repository {
     /// # Panics
     ///
     /// When git-subtree(1) execution fails
+    #[inline]
     pub fn subtree_split(&self, prefix: &str) -> Result<(), SubtreeSplitError> {
         if self.is_bare() {
             return Err(SubtreeSplitError::BareRepository);
@@ -910,6 +942,7 @@ impl Repository {
     /// # Panics
     ///
     /// When git-subtree(1) execution fails
+    #[inline]
     pub fn subtree_pull(
         &self,
         remote: &str,
@@ -941,6 +974,7 @@ impl Repository {
     /// # Errors
     ///
     /// Fails if current repo is bare. In other error cases see the provided message string.
+    #[inline]
     pub fn subtree_push(
         &self,
         remote: &str,
@@ -985,6 +1019,7 @@ impl Repository {
     /// # Panics
     ///
     /// When exit code of git-merge-base(1) is not 0 or 128
+    #[inline]
     pub fn merge_base(&self, ids: &[&str]) -> Result<Option<String>, InvalidCommitishError> {
         let output = self
             .git()

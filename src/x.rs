@@ -4,6 +4,7 @@ use posix_errors::PosixError;
 /// # Errors
 ///
 /// Returns an error when git reset --hard fails
+#[inline]
 pub fn reset_hard(repo: &Repository, sha: &str) -> Result<(), PosixError> {
     let mut cmd = repo.git();
     let out = cmd
