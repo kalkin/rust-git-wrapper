@@ -703,6 +703,42 @@ impl Repository {
         }
         Ok(())
     }
+
+    /// # Errors
+    ///
+    /// See [`CommitError`]
+    #[inline]
+    pub fn commit_extended(
+        &self,
+        message: &str,
+        allow_empty: bool,
+        no_verify: bool,
+    ) -> Result<(), CommitError> {
+        if self.is_bare() {
+            return Err(CommitError::BareRepository);
+        }
+
+        let mut cmd = self.git();
+        cmd.args(&["commit", "--quiet", "--no-edit"]);
+
+        if allow_empty {
+            cmd.arg("--allow-empty");
+        }
+
+        if no_verify {
+            cmd.arg("--no-verify");
+        }
+
+        cmd.args(&["--message", message]);
+
+        let out = cmd.output().expect("Failed to execute git-commit(1)");
+        if out.status.code().expect("Expected exit code") != 0 {
+            let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
+            let code = out.status.code().unwrap_or(1);
+            return Err(CommitError::Failure(msg, code));
+        }
+        Ok(())
+    }
     /// Return config value for specified key
     ///
     /// # Errors
