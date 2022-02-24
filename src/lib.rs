@@ -640,6 +640,14 @@ impl From<StagingError> for PosixError {
 }
 
 #[derive(thiserror::Error, Debug)]
+pub enum StashingError {
+    #[error("Failed to stash changes in GIT_WORK_TREE")]
+    Save(i32, String),
+    #[error("Failed to pop stashed changes in GIT_WORK_TREE")]
+    Pop(i32, String),
+}
+
+#[derive(thiserror::Error, Debug)]
 pub enum CommitError {
     #[error("`{0}`")]
     Failure(String, i32),
@@ -893,6 +901,48 @@ impl Repository {
                 Err(StagingError::Failure(msg, e))
             }
         }
+    }
+
+    /// Stash staged, unstaged and untracked files (keeps ignored files).
+    ///
+    /// # Errors
+    ///
+    /// See [`StashingError`]
+    #[inline]
+    pub fn stash_almost_all(&self, message: &str) -> Result<(), StashingError> {
+        let mut cmd = self.git();
+        cmd.arg("stash");
+        cmd.arg("--quiet");
+        cmd.args(&["--include-untracked", "-m", message]);
+
+        let out = cmd.output().expect("Failed to execute git-stash(1)");
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let code = out.status.code().unwrap_or(1);
+            return Err(StashingError::Save(code, stderr));
+        }
+        Ok(())
+    }
+
+    /// Pop stashed changes
+    ///
+    /// # Errors
+    ///
+    /// See [`StashingError`]
+    #[inline]
+    pub fn stash_pop(&self) -> Result<(), StashingError> {
+        let mut cmd = self.git();
+        let out = cmd
+            .args(&["stash", "pop", "--quiet"])
+            .output()
+            .expect("Failed to execute git-stash(1)");
+
+        if !out.status.success() {
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let code = out.status.code().unwrap_or(1);
+            return Err(StashingError::Pop(code, stderr));
+        }
+        Ok(())
     }
 
     /// # Errors
