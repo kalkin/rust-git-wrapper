@@ -639,9 +639,11 @@ impl From<StagingError> for PosixError {
     }
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum CommitError {
+    #[error("`{0}`")]
     Failure(String, i32),
+    #[error("Bare repository")]
     BareRepository,
 }
 
