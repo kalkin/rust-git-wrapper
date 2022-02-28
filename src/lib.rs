@@ -80,6 +80,7 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     }
 }
 
+#[derive(Debug)]
 pub enum ConfigSetError {
     InvalidSectionOrKey(String),
     InvalidConfigFile(String),
