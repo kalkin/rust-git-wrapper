@@ -18,7 +18,6 @@
 //! A wrapper around [git(1)](https://git-scm.com/docs/git) inspired by
 //! [`GitPython`](https://github.com/gitpython-developers/GitPython).
 
-#![allow(unknown_lints)]
 #![warn(clippy::all)]
 
 pub use posix_errors::{PosixError, EACCES, EINVAL, ENOENT};
@@ -473,7 +472,7 @@ impl Repository {
     #[must_use]
     #[inline]
     #[allow(clippy::shadow_reuse, clippy::missing_const_for_fn)]
-    pub fn new(git_dir: AbsoluteDirPath, work_tree: Option<AbsoluteDirPath>) -> Self {
+    fn new(git_dir: AbsoluteDirPath, work_tree: Option<AbsoluteDirPath>) -> Self {
         match work_tree {
             Some(work_tree) => Self::Normal { git_dir, work_tree },
             None => Self::Bare { git_dir },
@@ -591,13 +590,6 @@ impl Repository {
             cmd.env("GIT_WORK_TREE", &work_tree.0);
             cmd.current_dir(&work_tree.0);
         }
-        cmd
-    }
-
-    #[inline]
-    pub fn git_in_dir<P: AsRef<Path>>(&self, path: P) -> Command {
-        let mut cmd = self.git();
-        cmd.current_dir(path);
         cmd
     }
 }
