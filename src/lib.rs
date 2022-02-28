@@ -27,6 +27,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::Output;
 
+/// Experimental stuff
 pub mod x;
 
 macro_rules! cmd {
@@ -80,6 +81,8 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     }
 }
 
+/// Failed to change configuration file
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub enum ConfigSetError {
     InvalidSectionOrKey(String),
@@ -162,6 +165,7 @@ struct RemoteLine {
 }
 
 /// Represents a git remote
+#[allow(missing_docs)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Remote {
     pub name: String,
@@ -200,18 +204,24 @@ impl AbsoluteDirPath {
 ///
 /// This wrapper allows to keep track of optional *git-dir* and *work-tree* directories when
 /// executing commands. This functionality was needed for `glv` & `git-stree` project.
-
 #[derive(Clone, Debug)]
 pub enum Repository {
+    /// Bare repository *without* work-tree
     Bare {
+        /// GIT_DIR
         git_dir: AbsoluteDirPath,
     },
+    /// Bare repository *with* work-tree
     Normal {
+        /// GIT_DIR
         git_dir: AbsoluteDirPath,
+        /// WORK_TREE
         work_tree: AbsoluteDirPath,
     },
 }
 
+/// Error during repository instantiation
+#[allow(missing_docs)]
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum RepoError {
     #[error("GIT_DIR Not found")]
@@ -291,11 +301,14 @@ fn git_dir_from_work_tree(work_tree: &AbsoluteDirPath) -> Result<AbsoluteDirPath
     AbsoluteDirPath::new(result.as_ref())
 }
 
+/// Invalid git reference was provided
+#[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub struct InvalidRefError;
 
 /// Getters
 impl Repository {
+    /// Return true if is bare repository
     #[must_use]
     #[inline]
     pub const fn is_bare(&self) -> bool {
@@ -317,6 +330,7 @@ impl Repository {
         output2.status.success()
     }
 
+    /// Returns a `HashMap` of git remotes
     #[must_use]
     #[inline]
     pub fn remotes(&self) -> Option<HashMap<String, Remote>> {
@@ -366,6 +380,7 @@ impl Repository {
         Some(my_map)
     }
 
+    /// Returns the HEAD commit id if ref HEAD exists
     // TODO return a Result with custom error type
     #[must_use]
     #[inline]
@@ -383,6 +398,7 @@ impl Repository {
         Some(result)
     }
 
+    /// Return path to git `WORK_TREE`
     #[must_use]
     #[inline]
     pub fn work_tree(&self) -> Option<PathBuf> {
@@ -563,6 +579,7 @@ impl Repository {
         }
     }
 
+    /// Returns a prepared git `Command` struct
     #[must_use]
     #[inline]
     pub fn git(&self) -> Command {
@@ -585,6 +602,8 @@ impl Repository {
     }
 }
 
+/// Failed to add subtree
+#[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum SubtreeAddError {
     BareRepository,
@@ -592,6 +611,8 @@ pub enum SubtreeAddError {
     Failure(String, i32),
 }
 
+/// Failed to pull changes from remote in to subtree
+#[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum SubtreePullError {
     BareRepository,
@@ -599,12 +620,16 @@ pub enum SubtreePullError {
     Failure(String, i32),
 }
 
+/// Failed to push changes from subtree to remote
+#[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum SubtreePushError {
     BareRepository,
     Failure(String, i32),
 }
 
+/// Failed to split subtree
+#[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum SubtreeSplitError {
     BareRepository,
@@ -612,12 +637,16 @@ pub enum SubtreeSplitError {
     Failure(String, i32),
 }
 
+/// Failed to read config
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub enum ConfigReadError {
     InvalidSectionOrKey(String),
     InvalidConfigFile(String),
 }
 
+/// Failure to stage
+#[allow(missing_docs)]
 #[derive(thiserror::Error, Debug)]
 pub enum StagingError {
     #[error("Bare repository")]
@@ -640,6 +669,8 @@ impl From<StagingError> for PosixError {
     }
 }
 
+/// Error during stashing operation
+#[allow(missing_docs)]
 #[derive(thiserror::Error, Debug)]
 pub enum StashingError {
     #[error("Failed to stash changes in GIT_WORK_TREE")]
@@ -648,6 +679,8 @@ pub enum StashingError {
     Pop(i32, String),
 }
 
+/// Error during committing
+#[allow(missing_docs)]
 #[derive(thiserror::Error, Debug)]
 pub enum CommitError {
     #[error("`{0}`")]
@@ -656,6 +689,7 @@ pub enum CommitError {
     BareRepository,
 }
 
+/// Failed to find reference on remote
 #[derive(Debug)]
 pub enum RefSearchError {
     /// Thrown when `git-ls-remote(1)` fails to execute.
@@ -819,6 +853,7 @@ impl Repository {
         }
     }
 
+    /// Returns true if the `first` commit is an ancestor of the `second` commit.
     #[must_use]
     #[inline]
     pub fn is_ancestor(&self, first: &str, second: &str) -> bool {
@@ -1088,6 +1123,8 @@ impl Repository {
     }
 }
 
+/// Failed to resolve given value to a commit id
+#[allow(missing_docs)]
 #[derive(thiserror::Error, Debug)]
 pub enum InvalidCommitishError {
     #[error("Invalid reference or commit id: `{0}`")]
