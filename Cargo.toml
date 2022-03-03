@@ -1,20 +1,18 @@
 [package]
-name = "git-wrapper"
-version = "0.5.1"
-authors = ["Bahtiar `kalkin-` Gadimov <bahtiar@gadimov.de>"]
-edition = "2021"
-description="Simple handy wrappers around git commands"
-readme = "README.md"
-keywords = ["git"]
-license = "LGPL-3.0-or-later"
-repository = "https://github.com/kalkin/rust-git-wrapper"
-categories = ["development-tools"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+name = 'git-wrapper'
+authors = ['Bahtiar `kalkin-` Gadimov <bahtiar@gadimov.de>']
+categories = ['development-tools']
+description = 'Simple handy wrappers around git commands'
+edition = '2021'
+keywords = ['git']
+license = 'LGPL-3.0-or-later'
+readme = 'README.md'
+repository = 'https://github.com/kalkin/rust-git-wrapper'
+version = '0.5.1'
 
 [dependencies]
-posix-errors = "^1.2"
-thiserror = "1"
+posix-errors = '^1.2'
+thiserror = '1'
 
 [dev-dependencies]
-tempdir = "0.3.*"
+tempdir = '0.3.*'
