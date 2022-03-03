@@ -340,10 +340,6 @@ impl Repository {
             .output()
             .expect("Failed to execute git-remote(1)");
         if !out.status.success() {
-            eprintln!(
-                "Failed to execute git-remote(1):\n{}",
-                String::from_utf8_lossy(&out.stderr)
-            );
             return None;
         }
 
