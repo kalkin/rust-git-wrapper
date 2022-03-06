@@ -320,13 +320,12 @@ impl Repository {
     #[must_use]
     #[inline]
     pub fn is_clean(&self) -> bool {
-        let output = self.git().args(&["diff", "--quiet"]).output().unwrap();
-        if !output.status.success() {
-            return false;
-        }
-
-        let output2 = self.git().args(&["rev-parse", "HEAD"]).output().unwrap();
-        output2.status.success()
+        let output = self
+            .git()
+            .args(&["diff", "--quiet", "HEAD"])
+            .output()
+            .expect("Failed to execute git-diff(1)");
+        output.status.success()
     }
 
     /// Returns a `HashMap` of git remotes
@@ -1247,6 +1246,35 @@ mod test {
             assert!(!repo.is_bare(), "Expected a non-bare repository");
 
             tmp_dir.close().unwrap();
+        }
+    }
+
+    mod is_clean {
+        use crate::Repository;
+        use tempfile::TempDir;
+
+        #[test]
+        fn unstaged() {
+            let tmp_dir = TempDir::new().unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+
+            let readme = repo_path.join("README.md");
+            std::fs::File::create(&readme).unwrap();
+            std::fs::write(&readme, "# README").unwrap();
+            assert!(!repo.is_clean(), "Repo is unclean if sth. is unstaged");
+        }
+
+        #[test]
+        fn staged() {
+            let tmp_dir = TempDir::new().unwrap();
+            let repo_path = tmp_dir.path();
+            let repo = Repository::create(repo_path).unwrap();
+
+            let readme = repo_path.join("README.md");
+            std::fs::File::create(&readme).unwrap();
+            repo.stage(&readme).unwrap();
+            assert!(!repo.is_clean(), "Repo is unclean if sth. is staged");
         }
     }
 
