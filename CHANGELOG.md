@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2022-03-06
+
+### Added
+
+- Stashing functions
+- `Repository::commit_extended()`
+- From trait for `RepoError` & `StagingError`
+- experimental `function x::reset_hard()`
+
+### Changed
+
+- `CommitError` derive from `thiserror::Error`
+- Simplify `StagingError`
+- `subtree_split()` show progress
+- Provide error messages for each enum value
+
+### Fixed
+
+- `Repository::stash_pop()` restore index
+- `Repository::is_clean()` now also checks for staged content
+- Trim whitespace in `Repository::head()` output
+- `clippy::to-string-in-format-args`
+- `merge_base` handle exit code 1
+
+## [0.5.1] - 2022-01-17
+
+### Fixed
+
+- fix(git-stree-push): Pushing to remote
+
 ## [0.5.0] - 2022-01-05
 
 ### Changed
