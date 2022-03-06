@@ -956,7 +956,7 @@ impl Repository {
     pub fn stash_pop(&self) -> Result<(), StashingError> {
         let mut cmd = self.git();
         let out = cmd
-            .args(&["stash", "pop", "--quiet"])
+            .args(&["stash", "pop", "--quiet", "--index"])
             .output()
             .expect("Failed to execute git-stash(1)");
 
