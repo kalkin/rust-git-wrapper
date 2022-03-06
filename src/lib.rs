@@ -1166,30 +1166,13 @@ impl Repository {
 #[cfg(test)]
 mod test {
 
-    // https://stackoverflow.com/a/63904992
-    macro_rules! function {
-        () => {{
-            fn f() {}
-            fn type_name_of<T>(_: T) -> &'static str {
-                std::any::type_name::<T>()
-            }
-            let name = type_name_of(f);
-
-            // Find and cut the rest of the path
-            match &name[..name.len() - 3].rfind(':') {
-                Some(pos) => &name[pos + 1..name.len() - 3],
-                None => &name[..name.len() - 3],
-            }
-        }};
-    }
-
     mod repository_initialization {
         use crate::{RepoError, Repository};
-        use tempdir::TempDir;
+        use tempfile::TempDir;
 
         #[test]
         fn git_dir_not_found() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let discovery_path = tmp_dir.path();
             let actual = Repository::discover(discovery_path);
             assert!(actual.is_err(), "Fail to find repo in an empty directory");
@@ -1200,7 +1183,7 @@ mod test {
 
         #[test]
         fn bare_repo() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create_bare(repo_path).unwrap();
             assert!(
@@ -1221,7 +1204,7 @@ mod test {
 
         #[test]
         fn normal_repo() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
 
@@ -1244,11 +1227,11 @@ mod test {
 
     mod is_bare {
         use crate::Repository;
-        use tempdir::TempDir;
+        use tempfile::TempDir;
 
         #[test]
         fn yes() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create_bare(repo_path).unwrap();
             assert!(repo.is_bare(), "Expected a bare repository");
@@ -1258,7 +1241,7 @@ mod test {
 
         #[test]
         fn no() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             assert!(!repo.is_bare(), "Expected a non-bare repository");
@@ -1269,11 +1252,11 @@ mod test {
 
     mod config {
         use crate::Repository;
-        use tempdir::TempDir;
+        use tempfile::TempDir;
 
         #[test]
         fn config() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create_bare(repo_path).unwrap();
             let actual = repo.config("core.bare").unwrap();
@@ -1286,11 +1269,11 @@ mod test {
     mod sparse_checkout {
         use crate::Repository;
         use std::process::Command;
-        use tempdir::TempDir;
+        use tempfile::TempDir;
 
         #[test]
         fn is_sparse() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             let mut cmd = Command::new("git");
@@ -1305,7 +1288,7 @@ mod test {
 
         #[test]
         fn not_sparse() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             assert!(!repo.is_sparse(), "Not sparse repository")
@@ -1313,7 +1296,7 @@ mod test {
 
         #[test]
         fn add() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             repo.git()
@@ -1329,11 +1312,11 @@ mod test {
 
     mod subtree_add {
         use crate::{Repository, SubtreeAddError};
-        use tempdir::TempDir;
+        use tempfile::TempDir;
 
         #[test]
         fn bare_repo() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create_bare(repo_path).unwrap();
             let actual =
@@ -1346,7 +1329,7 @@ mod test {
 
         #[test]
         fn dirty_work_tree() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             let actual =
@@ -1359,7 +1342,7 @@ mod test {
 
         #[test]
         fn successfull() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             let readme = repo_path.join("README.md");
@@ -1379,11 +1362,11 @@ mod test {
 
     mod subtree_pull {
         use crate::{Repository, SubtreePullError};
-        use tempdir::TempDir;
+        use tempfile::TempDir;
 
         #[test]
         fn bare_repo() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create_bare(repo_path).unwrap();
             let actual =
@@ -1396,7 +1379,7 @@ mod test {
 
         #[test]
         fn dirty_work_tree() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             let actual =
@@ -1409,7 +1392,7 @@ mod test {
 
         #[test]
         fn successfull() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             let readme = repo_path.join("README.md");
@@ -1438,11 +1421,11 @@ mod test {
     mod remote_ref_resolution {
         use crate::RefSearchError;
         use crate::Repository;
-        use tempdir::TempDir;
+        use tempfile::TempDir;
 
         #[test]
         fn not_found() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             let result =
@@ -1454,7 +1437,7 @@ mod test {
 
         #[test]
         fn failure() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             let result = repo.remote_ref_to_id("https://example.com/asd/foo", "v230.40.50");
@@ -1465,7 +1448,7 @@ mod test {
 
         #[test]
         fn successfull_search() {
-            let tmp_dir = TempDir::new(function!()).unwrap();
+            let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).unwrap();
             let result = repo.remote_ref_to_id("https://github.com/kalkin/file-expert", "v0.9.0");

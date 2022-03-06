@@ -15,4 +15,4 @@ posix-errors = '^1.2'
 thiserror = '1'
 
 [dev-dependencies]
-tempdir = '0.3.*'
+tempfile = '3'
