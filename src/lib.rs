@@ -123,7 +123,7 @@ pub fn config_file_set(file: &Path, key: &str, value: &str) -> Result<(), Config
         Ok(())
     } else {
         let msg = String::from_utf8(out.stdout).expect("UTF-8 encoding");
-        match out.status.code().unwrap() {
+        match out.status.code().unwrap_or(1) {
             1 => Err(ConfigSetError::InvalidSectionOrKey(msg)),
             3 => Err(ConfigSetError::InvalidConfigFile(msg)),
             4 => Err(ConfigSetError::WriteFailed(msg)),
@@ -249,7 +249,7 @@ trait GenericRepository {
                 .trim()
                 .to_owned())
         } else {
-            match out.status.code().unwrap() {
+            match out.status.code().unwrap_or(3) {
                 1 => Err(ConfigReadError::InvalidSectionOrKey(key.to_owned())),
                 3 => {
                     let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
@@ -343,9 +343,10 @@ fn search_git_dir(start: &Path) -> Result<AbsoluteDirPath, RepoError> {
 }
 
 fn work_tree_from_git_dir(git_dir: &AbsoluteDirPath) -> Result<AbsoluteDirPath, RepoError> {
-    let gd = git_dir.0.to_str().unwrap();
     let mut cmd = Command::new("git");
-    cmd.args(&["--git-dir", gd, "rev-parse", "--is-bare-repository"]);
+    cmd.arg("--git-dir");
+    cmd.arg(git_dir.0.as_os_str());
+    cmd.args(&["rev-parse", "--is-bare-repository"]);
     let output = cmd.output().expect("failed to execute rev-parse");
     if output.status.success() {
         let tmp = String::from_utf8_lossy(&output.stdout);
@@ -355,7 +356,7 @@ fn work_tree_from_git_dir(git_dir: &AbsoluteDirPath) -> Result<AbsoluteDirPath, 
     }
 
     match git_dir.0.parent() {
-        Some(dir) => Ok(dir.try_into()?),
+        Some(dir) => Ok(AbsoluteDirPath::try_from(dir)?),
         None => Err(RepoError::BareRepo),
     }
 }
@@ -532,11 +533,19 @@ impl Repository {
     #[inline]
     pub fn create(path: &Path) -> Result<Self, String> {
         let mut cmd = Command::new("git");
-        let out = cmd.arg("init").current_dir(&path).output().unwrap();
+        let out = cmd
+            .arg("init")
+            .current_dir(&path)
+            .output()
+            .expect("Executed git-init(1)");
 
         if out.status.success() {
-            let work_tree = path.try_into().unwrap();
-            let git_dir = path.join(".git").as_path().try_into().unwrap();
+            let work_tree = path.try_into().map_err(|e| format!("{}", e))?;
+            let git_dir = path
+                .join(".git")
+                .as_path()
+                .try_into()
+                .map_err(|e| format!("{}", e))?;
             Ok(Self { git_dir, work_tree })
         } else {
             Err(String::from_utf8_lossy(&out.stderr).to_string())
@@ -734,8 +743,8 @@ impl Repository {
             .git()
             .args(&["commit", "-m", message])
             .output()
-            .unwrap();
-        if out.status.code().unwrap() != 0 {
+            .expect("Executed git-commit(1)");
+        if out.status.code().unwrap_or(1) != 0 {
             let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
             let code = out.status.code().unwrap_or(1);
             return Err(CommitError::Failure(msg, code));
@@ -855,14 +864,20 @@ impl Repository {
     #[inline]
     pub fn stage(&self, path: &Path) -> Result<(), StagingError> {
         let relative_path = if path.is_absolute() {
-            path.strip_prefix(self.work_tree().unwrap()).unwrap()
+            path.strip_prefix(self.work_tree().expect("Non bare repo"))
+                .expect("Stripped path prefix")
         } else {
             path
         };
 
         let file = relative_path.as_os_str();
-        let out = self.git().args(&["add", "--"]).arg(file).output().unwrap();
-        match out.status.code().unwrap() {
+        let out = self
+            .git()
+            .args(&["add", "--"])
+            .arg(file)
+            .output()
+            .expect("Executed git-add(1)");
+        match out.status.code().unwrap_or(1) {
             0 => Ok(()),
             128 => Err(StagingError::FileDoesNotExist(relative_path.to_path_buf())),
             e => {
@@ -1144,7 +1159,7 @@ mod test {
         fn unstaged() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
 
             let readme = repo_path.join("README.md");
             std::fs::File::create(&readme).unwrap();
@@ -1156,7 +1171,7 @@ mod test {
         fn staged() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
 
             let readme = repo_path.join("README.md");
             std::fs::File::create(&readme).unwrap();
@@ -1190,7 +1205,7 @@ mod test {
         fn is_sparse() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             let mut cmd = Command::new("git");
             let out = cmd
                 .args(&["sparse-checkout", "init"])
@@ -1205,7 +1220,7 @@ mod test {
         fn not_sparse() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             assert!(!repo.is_sparse(), "Not sparse repository")
         }
 
@@ -1213,7 +1228,7 @@ mod test {
         fn add() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             repo.git()
                 .args(["sparse-checkout", "init"])
                 .output()
@@ -1233,7 +1248,7 @@ mod test {
         fn dirty_work_tree() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             let actual =
                 repo.subtree_add("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
             assert!(actual.is_err(), "Expected an error");
@@ -1246,7 +1261,7 @@ mod test {
         fn successfull() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             let readme = repo_path.join("README.md");
             std::fs::File::create(&readme).unwrap();
             std::fs::write(&readme, "# README").unwrap();
@@ -1270,7 +1285,7 @@ mod test {
         fn dirty_work_tree() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             let actual =
                 repo.subtree_pull("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
             assert!(actual.is_err(), "Expected an error");
@@ -1283,7 +1298,7 @@ mod test {
         fn successfull() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             let readme = repo_path.join("README.md");
             std::fs::File::create(&readme).unwrap();
             std::fs::write(&readme, "# README").unwrap();
@@ -1316,7 +1331,7 @@ mod test {
         fn not_found() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             let result =
                 repo.remote_ref_to_id("https://github.com/kalkin/file-expert", "v230.40.50");
             assert!(result.is_err());
@@ -1332,7 +1347,7 @@ mod test {
         fn failure() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             let result = repo.remote_ref_to_id("https://example.com/asd/foo", "v230.40.50");
             assert!(result.is_err());
             let actual = matches!(result.unwrap_err(), RefSearchError::Failure(_));
@@ -1343,7 +1358,7 @@ mod test {
         fn successfull_search() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
+            let repo = Repository::create(repo_path).expect("Created repository");
             let result = repo.remote_ref_to_id("https://github.com/kalkin/file-expert", "v0.9.0");
             assert!(result.is_ok());
             let actual = result.unwrap();

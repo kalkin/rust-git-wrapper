@@ -25,10 +25,10 @@ impl BareRepository {
             .arg("--bare")
             .current_dir(&path)
             .output()
-            .unwrap();
+            .expect("Execute git-init(1)");
 
         if out.status.success() {
-            let git_dir = path.try_into().unwrap();
+            let git_dir = path.try_into().map_err(|e| format!("{}", e))?;
             Ok(Self(git_dir))
         } else {
             Err(String::from_utf8_lossy(&out.stderr).to_string())
