@@ -27,6 +27,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::Output;
 
+mod bare_repo;
+pub use crate::bare_repo::*;
+
 /// Experimental stuff
 pub mod x;
 
@@ -79,6 +82,14 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
     } else {
         Err(PosixError::from(output))
     }
+}
+
+/// Failed to read config
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub enum ConfigReadError {
+    InvalidSectionOrKey(String),
+    InvalidConfigFile(String),
 }
 
 /// Failed to change configuration file
@@ -185,6 +196,7 @@ fn cwd() -> Result<PathBuf, RepoError> {
 #[derive(Debug, Clone)]
 pub struct AbsoluteDirPath(PathBuf);
 impl AsRef<OsStr> for AbsoluteDirPath {
+    #[inline]
     fn as_ref(&self) -> &OsStr {
         self.0.as_os_str()
     }
@@ -193,6 +205,7 @@ impl AsRef<OsStr> for AbsoluteDirPath {
 impl TryFrom<&Path> for AbsoluteDirPath {
     type Error = RepoError;
 
+    #[inline]
     fn try_from(value: &Path) -> Result<Self, Self::Error> {
         let path_buf;
         if value.is_absolute() {
@@ -207,24 +220,60 @@ impl TryFrom<&Path> for AbsoluteDirPath {
     }
 }
 
+trait GenericRepository {
+    /// Return config value for specified key
+    ///
+    /// # Errors
+    ///
+    /// When given invalid key or an invalid config file is read.
+    ///
+    /// # Panics
+    ///
+    /// Will panic if git exits with an unexpected error code. Expected codes are 0, 1 & 3.
+    #[inline]
+    fn gen_config(&self, key: &str) -> Result<String, ConfigReadError> {
+        let out = self
+            .gen_git()
+            .arg("config")
+            .arg(key)
+            .output()
+            .expect("Failed to execute git-config(1)");
+        if out.status.success() {
+            Ok(String::from_utf8(out.stdout)
+                .expect("UTF-8 encoding")
+                .trim()
+                .to_owned())
+        } else {
+            match out.status.code().unwrap() {
+                1 => Err(ConfigReadError::InvalidSectionOrKey(key.to_owned())),
+                3 => {
+                    let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
+                    Err(ConfigReadError::InvalidConfigFile(msg))
+                }
+                _ => {
+                    let msg = String::from_utf8_lossy(out.stderr.as_ref());
+                    panic!("Unexpected git-config(1) failure:\n{}", msg);
+                }
+            }
+        }
+    }
+
+    /// Returns a prepared git `Command` struct
+    /// TODO move to generic repo trait
+    #[must_use]
+    fn gen_git(&self) -> Command;
+}
+
 /// The main repository object.
 ///
 /// This wrapper allows to keep track of optional *git-dir* and *work-tree* directories when
 /// executing commands. This functionality was needed for `glv` & `git-stree` project.
 #[derive(Clone, Debug)]
-pub enum Repository {
-    /// Bare repository *without* work-tree
-    Bare {
-        /// GIT_DIR
-        git_dir: AbsoluteDirPath,
-    },
-    /// Bare repository *with* work-tree
-    Normal {
-        /// GIT_DIR
-        git_dir: AbsoluteDirPath,
-        /// WORK_TREE
-        work_tree: AbsoluteDirPath,
-    },
+pub struct Repository {
+    /// GIT_DIR
+    git_dir: AbsoluteDirPath,
+    /// WORK_TREE
+    work_tree: AbsoluteDirPath,
 }
 
 /// Error during repository instantiation
@@ -233,6 +282,8 @@ pub enum Repository {
 pub enum RepoError {
     #[error("GIT_DIR Not found")]
     GitDirNotFound,
+    #[error("Bare repository")]
+    BareRepo,
     #[error("Invalid directory: `{0}`")]
     InvalidDirectory(PathBuf),
     #[error("Failed to canonicalize the path buffer: `{0}`")]
@@ -249,6 +300,7 @@ impl From<RepoError> for PosixError {
             RepoError::GitDirNotFound | RepoError::InvalidDirectory(_) => Self::new(ENOENT, msg),
             RepoError::AbsolutionError(_) => Self::new(EINVAL, msg),
             RepoError::FailAccessCwd => Self::new(EACCES, msg),
+            RepoError::BareRepo => Self::new(EINVAL, format!("{}", e)),
         }
     }
 }
@@ -279,13 +331,13 @@ fn search_git_dir(start: &Path) -> Result<AbsoluteDirPath, RepoError> {
     for parent in path.ancestors() {
         let candidate = parent.join(".git");
         if candidate.is_dir() && candidate.exists() {
-            return Ok(candidate.as_path().try_into()?);
+            return candidate.as_path().try_into();
         }
     }
     Err(RepoError::GitDirNotFound)
 }
 
-fn work_tree_from_git_dir(git_dir: &AbsoluteDirPath) -> Result<Option<AbsoluteDirPath>, RepoError> {
+fn work_tree_from_git_dir(git_dir: &AbsoluteDirPath) -> Result<AbsoluteDirPath, RepoError> {
     let gd = git_dir.0.to_str().unwrap();
     let mut cmd = Command::new("git");
     cmd.args(&["--git-dir", gd, "rev-parse", "--is-bare-repository"]);
@@ -293,13 +345,13 @@ fn work_tree_from_git_dir(git_dir: &AbsoluteDirPath) -> Result<Option<AbsoluteDi
     if output.status.success() {
         let tmp = String::from_utf8_lossy(&output.stdout);
         if tmp.trim() == "true" {
-            return Ok(None);
+            return Err(RepoError::BareRepo);
         }
     }
 
     match git_dir.0.parent() {
-        Some(dir) => Ok(Some(dir.try_into()?)),
-        None => Ok(None),
+        Some(dir) => Ok(dir.try_into()?),
+        None => Err(RepoError::BareRepo),
     }
 }
 
@@ -315,13 +367,6 @@ pub struct InvalidRefError;
 
 /// Getters
 impl Repository {
-    /// Return true if is bare repository
-    #[must_use]
-    #[inline]
-    pub const fn is_bare(&self) -> bool {
-        matches!(self, Self::Bare { .. })
-    }
-
     /// # Panics
     ///
     /// Panics of executing git-diff(1) fails
@@ -384,30 +429,34 @@ impl Repository {
 
     /// Returns the HEAD commit id if ref HEAD exists
     // TODO return a Result with custom error type
+    //
+    /// # Panics
+    ///
+    /// Panics when fails to resolve HEAD
     #[must_use]
     #[inline]
-    pub fn head(&self) -> Option<String> {
+    pub fn head(&self) -> String {
         let args = &["rev-parse", "HEAD"];
         let mut cmd = self.git();
         let out = cmd
             .args(args)
             .output()
             .expect("Failed to execute git-rev-parse(1)");
-        if !out.status.success() {
-            return None;
-        }
-        let result = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-        Some(result)
+        assert!(
+            out.status.success(),
+            "git rev-parse returned unexpected error"
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
     }
 
     /// Return path to git `WORK_TREE`
+    ///
+    /// TODO move to generic repo trait
+    /// TODO Remove optional
     #[must_use]
     #[inline]
     pub fn work_tree(&self) -> Option<PathBuf> {
-        match self {
-            Self::Normal { work_tree, .. } => Some(work_tree.into()),
-            Self::Bare { .. } => None,
-        }
+        Some(self.work_tree.0.clone())
     }
 
     /// Return true if the repo is sparse
@@ -418,16 +467,13 @@ impl Repository {
         path.exists()
     }
 
+    /// TODO move to generic repo trait
     const fn git_dir(&self) -> &AbsoluteDirPath {
-        match self {
-            Self::Normal { git_dir, .. } | Self::Bare { git_dir } => git_dir,
-        }
+        &self.git_dir
     }
 
     const fn git_dir_path(&self) -> &PathBuf {
-        match self {
-            Self::Normal { git_dir, .. } | Self::Bare { git_dir } => &git_dir.0,
-        }
+        &self.git_dir.0
     }
 
     /// # Errors
@@ -458,10 +504,8 @@ impl Repository {
     #[inline]
     pub fn discover(path: &Path) -> Result<Self, RepoError> {
         let git_dir = search_git_dir(path)?;
-        if let Some(work_tree) = work_tree_from_git_dir(&git_dir)? {
-            return Ok(Self::Normal { git_dir, work_tree });
-        }
-        Ok(Self::Bare { git_dir })
+        let work_tree = work_tree_from_git_dir(&git_dir)?;
+        Ok(Self { git_dir, work_tree })
     }
 
     /// # Errors
@@ -470,16 +514,6 @@ impl Repository {
     #[inline]
     pub fn default() -> Result<Self, RepoError> {
         Self::from_args(None, None, None)
-    }
-
-    #[must_use]
-    #[inline]
-    #[allow(clippy::shadow_reuse, clippy::missing_const_for_fn)]
-    fn new(git_dir: AbsoluteDirPath, work_tree: Option<AbsoluteDirPath>) -> Self {
-        match work_tree {
-            Some(work_tree) => Self::Normal { git_dir, work_tree },
-            None => Self::Bare { git_dir },
-        }
     }
 
     /// # Panics
@@ -497,32 +531,7 @@ impl Repository {
         if out.status.success() {
             let work_tree = path.try_into().unwrap();
             let git_dir = path.join(".git").as_path().try_into().unwrap();
-            Ok(Self::Normal { git_dir, work_tree })
-        } else {
-            Err(String::from_utf8_lossy(&out.stderr).to_string())
-        }
-    }
-
-    /// # Panics
-    ///
-    /// When git execution fails
-    ///
-    /// # Errors
-    ///
-    /// Returns a string output when something goes horrible wrong
-    #[inline]
-    pub fn create_bare(path: &Path) -> Result<Self, String> {
-        let mut cmd = Command::new("git");
-        let out = cmd
-            .arg("init")
-            .arg("--bare")
-            .current_dir(&path)
-            .output()
-            .unwrap();
-
-        if out.status.success() {
-            let git_dir = path.try_into().unwrap();
-            Ok(Self::Bare { git_dir })
+            Ok(Self { git_dir, work_tree })
         } else {
             Err(String::from_utf8_lossy(&out.stderr).to_string())
         }
@@ -546,12 +555,12 @@ impl Repository {
                 };
 
                 let work_tree = if let Ok(wt) = std::env::var("GIT_WORK_TREE") {
-                    Some(AbsoluteDirPath::try_from(wt.as_ref())?)
+                    AbsoluteDirPath::try_from(wt.as_ref())?
                 } else {
                     work_tree_from_git_dir(&git_dir)?
                 };
 
-                Ok(Self::new(git_dir, work_tree))
+                Ok(Self { git_dir, work_tree })
             }
             (_, _, _) => {
                 let root = change.map_or_else(PathBuf::new, PathBuf::from);
@@ -559,41 +568,26 @@ impl Repository {
                     (Some(g_dir), None) => {
                         let git_dir = root.join(g_dir).as_path().try_into()?;
                         let work_tree = work_tree_from_git_dir(&git_dir)?;
-                        Ok(Self::new(git_dir, work_tree))
+                        Ok(Self { git_dir, work_tree })
                     }
                     (None, Some(w_dir)) => {
                         let work_tree = root.join(w_dir).as_path().try_into()?;
                         let git_dir = git_dir_from_work_tree(&work_tree)?;
-                        Ok(Self::Normal { git_dir, work_tree })
+                        Ok(Self { git_dir, work_tree })
                     }
                     (Some(g_dir), Some(w_dir)) => {
                         let git_dir = root.join(g_dir).as_path().try_into()?;
                         let work_tree = root.join(w_dir).as_path().try_into()?;
-                        Ok(Self::Normal { git_dir, work_tree })
+                        Ok(Self { git_dir, work_tree })
                     }
                     (None, None) => {
                         let git_dir = search_git_dir(&root)?;
                         let work_tree = work_tree_from_git_dir(&git_dir)?;
-                        Ok(Self::new(git_dir, work_tree))
+                        Ok(Self { git_dir, work_tree })
                     }
                 }
             }
         }
-    }
-
-    /// Returns a prepared git `Command` struct
-    #[must_use]
-    #[inline]
-    pub fn git(&self) -> Command {
-        let mut cmd = Command::new("git");
-        let git_dir = self.git_dir().0.to_str().expect("Convert to string");
-        cmd.env("GIT_DIR", git_dir);
-
-        if let Self::Normal { work_tree, .. } = self {
-            cmd.env("GIT_WORK_TREE", &work_tree.0);
-            cmd.current_dir(&work_tree.0);
-        }
-        cmd
     }
 }
 
@@ -601,7 +595,6 @@ impl Repository {
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum SubtreeAddError {
-    BareRepository,
     WorkTreeDirty,
     Failure(String, i32),
 }
@@ -610,7 +603,6 @@ pub enum SubtreeAddError {
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum SubtreePullError {
-    BareRepository,
     WorkTreeDirty,
     Failure(String, i32),
 }
@@ -619,7 +611,6 @@ pub enum SubtreePullError {
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum SubtreePushError {
-    BareRepository,
     Failure(String, i32),
 }
 
@@ -627,25 +618,14 @@ pub enum SubtreePushError {
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum SubtreeSplitError {
-    BareRepository,
     WorkTreeDirty,
     Failure(String, i32),
-}
-
-/// Failed to read config
-#[allow(missing_docs)]
-#[derive(Debug)]
-pub enum ConfigReadError {
-    InvalidSectionOrKey(String),
-    InvalidConfigFile(String),
 }
 
 /// Failure to stage
 #[allow(missing_docs)]
 #[derive(thiserror::Error, Debug)]
 pub enum StagingError {
-    #[error("Bare repository")]
-    BareRepository,
     #[error("`{0}`")]
     Failure(String, i32),
     #[error("File does not exist: `{0}`")]
@@ -657,7 +637,6 @@ impl From<StagingError> for PosixError {
     fn from(e: StagingError) -> Self {
         let msg = format!("{}", e);
         match e {
-            StagingError::BareRepository => Self::new(1, msg),
             StagingError::FileDoesNotExist(_) => Self::new(ENOENT, msg),
             StagingError::Failure(_, code) => Self::new(code, msg),
         }
@@ -680,8 +659,6 @@ pub enum StashingError {
 pub enum CommitError {
     #[error("`{0}`")]
     Failure(String, i32),
-    #[error("Bare repository")]
-    BareRepository,
 }
 
 /// Failed to find reference on remote
@@ -726,9 +703,6 @@ impl Repository {
     /// When `git-commit(1)` fails to execute
     #[inline]
     pub fn commit(&self, message: &str) -> Result<(), CommitError> {
-        if self.is_bare() {
-            return Err(CommitError::BareRepository);
-        }
         let out = self
             .git()
             .args(&["commit", "-m", message])
@@ -752,10 +726,6 @@ impl Repository {
         allow_empty: bool,
         no_verify: bool,
     ) -> Result<(), CommitError> {
-        if self.is_bare() {
-            return Err(CommitError::BareRepository);
-        }
-
         let mut cmd = self.git();
         cmd.args(&["commit", "--quiet", "--no-edit"]);
 
@@ -777,43 +747,6 @@ impl Repository {
         }
         Ok(())
     }
-    /// Return config value for specified key
-    ///
-    /// # Errors
-    ///
-    /// When given invalid key or an invalid config file is read.
-    ///
-    /// # Panics
-    ///
-    /// Will panic if git exits with an unexpected error code. Expected codes are 0, 1 & 3.
-    #[inline]
-    pub fn config(&self, key: &str) -> Result<String, ConfigReadError> {
-        let out = self
-            .git()
-            .arg("config")
-            .arg(key)
-            .output()
-            .expect("Failed to execute git-config(1)");
-        if out.status.success() {
-            Ok(String::from_utf8(out.stdout)
-                .expect("UTF-8 encoding")
-                .trim()
-                .to_owned())
-        } else {
-            match out.status.code().unwrap() {
-                1 => Err(ConfigReadError::InvalidSectionOrKey(key.to_owned())),
-                3 => {
-                    let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
-                    Err(ConfigReadError::InvalidConfigFile(msg))
-                }
-                _ => {
-                    let msg = String::from_utf8_lossy(out.stderr.as_ref());
-                    panic!("Unexpected git-config(1) failure:\n{}", msg);
-                }
-            }
-        }
-    }
-
     /// Read file from workspace or use `git-show(1)` if bare repository
     ///
     /// # Panics
@@ -823,29 +756,11 @@ impl Repository {
     /// # Errors
     ///
     /// When fails throws [`std::io::Error`]
+    /// TODO move to generic repo trait
     #[inline]
     pub fn hack_read_file(&self, path: &Path) -> std::io::Result<Vec<u8>> {
-        match self {
-            Self::Normal { work_tree, .. } => {
-                let absolute_path = work_tree.0.join(path);
-                std::fs::read(absolute_path)
-            }
-            Self::Bare { .. } => {
-                let file_path = format!(":{}", path.to_str().expect("UTF-8 string"));
-                let mut cmd = self.git();
-                cmd.args(&["show", &file_path]);
-                let out = cmd.output().expect("Failed to execute git-show(1)");
-                if out.status.success() {
-                    Ok(out.stdout)
-                } else if out.status.code().unwrap() == 128 {
-                    let msg = format!("Failed to read file: {:?}", file_path);
-                    Err(std::io::Error::new(std::io::ErrorKind::NotFound, msg))
-                } else {
-                    let msg = String::from_utf8_lossy(out.stderr.as_ref());
-                    Err(std::io::Error::new(std::io::ErrorKind::Other, msg))
-                }
-            }
-        }
+        let absolute_path = self.work_tree.0.join(path);
+        std::fs::read(absolute_path)
     }
 
     /// Returns true if the `first` commit is an ancestor of the `second` commit.
@@ -912,10 +827,6 @@ impl Repository {
     /// Panics if fails to execute `git-add(1)`
     #[inline]
     pub fn stage(&self, path: &Path) -> Result<(), StagingError> {
-        if self.is_bare() {
-            return Err(StagingError::BareRepository);
-        }
-
         let relative_path = if path.is_absolute() {
             path.strip_prefix(self.work_tree().unwrap()).unwrap()
         } else {
@@ -991,10 +902,6 @@ impl Repository {
         revision: &str,
         message: &str,
     ) -> Result<(), SubtreeAddError> {
-        if self.is_bare() {
-            return Err(SubtreeAddError::BareRepository);
-        }
-
         if !self.is_clean() {
             return Err(SubtreeAddError::WorkTreeDirty);
         }
@@ -1021,10 +928,6 @@ impl Repository {
     /// When git-subtree(1) execution fails
     #[inline]
     pub fn subtree_split(&self, prefix: &str) -> Result<(), SubtreeSplitError> {
-        if self.is_bare() {
-            return Err(SubtreeSplitError::BareRepository);
-        }
-
         if !self.is_clean() {
             return Err(SubtreeSplitError::WorkTreeDirty);
         }
@@ -1069,14 +972,9 @@ impl Repository {
         git_ref: &str,
         message: &str,
     ) -> Result<(), SubtreePullError> {
-        if self.is_bare() {
-            return Err(SubtreePullError::BareRepository);
-        }
-
         if !self.is_clean() {
             return Err(SubtreePullError::WorkTreeDirty);
         }
-
         let args = vec!["-q", "-P", prefix, remote, git_ref, "-m", message];
         let mut cmd = self.git();
         cmd.arg("subtree").arg("pull").args(args);
@@ -1100,10 +998,6 @@ impl Repository {
         prefix: &str,
         git_ref: &str,
     ) -> Result<(), SubtreePushError> {
-        if self.is_bare() {
-            return Err(SubtreePushError::BareRepository);
-        }
-
         let args = vec!["subtree", "push", "-q", "-P", prefix, remote, git_ref];
         let mut cmd = self.git();
         cmd.args(args);
@@ -1168,6 +1062,25 @@ impl Repository {
             }
         }
     }
+
+    /// Returns a prepared git `Command` struct
+    /// TODO move to generic repo trait
+    #[must_use]
+    #[inline]
+    pub fn git(&self) -> Command {
+        let mut cmd = Command::new("git");
+        let git_dir = self.git_dir().0.to_str().expect("Convert to string");
+        cmd.env("GIT_DIR", git_dir);
+        cmd.env("GIT_WORK_TREE", &self.work_tree.0);
+        cmd.current_dir(&self.work_tree.0);
+        cmd
+    }
+}
+
+impl GenericRepository for Repository {
+    fn gen_git(&self) -> Command {
+        self.git()
+    }
 }
 
 #[cfg(test)]
@@ -1189,71 +1102,10 @@ mod test {
         }
 
         #[test]
-        fn bare_repo() {
-            let tmp_dir = TempDir::new().unwrap();
-            let repo_path = tmp_dir.path();
-            let repo = Repository::create_bare(repo_path).unwrap();
-            assert!(
-                match repo {
-                    Repository::Normal { .. } => false,
-                    Repository::Bare { .. } => true,
-                },
-                "Expected a bare repo"
-            );
-
-            assert_eq!(
-                repo.work_tree(),
-                None,
-                "Bare repo should not have a work-tree"
-            );
-            tmp_dir.close().unwrap();
-        }
-
-        #[test]
         fn normal_repo() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
-
-            assert!(
-                match repo {
-                    Repository::Normal { .. } => true,
-                    Repository::Bare { .. } => false,
-                },
-                "Expected a non-bare repo"
-            );
-
-            assert_ne!(
-                repo.work_tree(),
-                None,
-                "Non-Bare repo should have a work-tree"
-            );
-            tmp_dir.close().unwrap();
-        }
-    }
-
-    mod is_bare {
-        use crate::Repository;
-        use tempfile::TempDir;
-
-        #[test]
-        fn yes() {
-            let tmp_dir = TempDir::new().unwrap();
-            let repo_path = tmp_dir.path();
-            let repo = Repository::create_bare(repo_path).unwrap();
-            assert!(repo.is_bare(), "Expected a bare repository");
-
-            tmp_dir.close().unwrap();
-        }
-
-        #[test]
-        fn no() {
-            let tmp_dir = TempDir::new().unwrap();
-            let repo_path = tmp_dir.path();
-            let repo = Repository::create(repo_path).unwrap();
-            assert!(!repo.is_bare(), "Expected a non-bare repository");
-
-            tmp_dir.close().unwrap();
+            let _repo = Repository::create(repo_path).unwrap();
         }
     }
 
@@ -1287,14 +1139,14 @@ mod test {
     }
 
     mod config {
-        use crate::Repository;
+        use crate::BareRepository;
         use tempfile::TempDir;
 
         #[test]
         fn config() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
-            let repo = Repository::create_bare(repo_path).unwrap();
+            let repo = BareRepository::create(repo_path).expect("Created bare repository");
             let actual = repo.config("core.bare").unwrap();
             assert_eq!(actual, "true".to_string(), "Expected true");
 
@@ -1351,19 +1203,6 @@ mod test {
         use tempfile::TempDir;
 
         #[test]
-        fn bare_repo() {
-            let tmp_dir = TempDir::new().unwrap();
-            let repo_path = tmp_dir.path();
-            let repo = Repository::create_bare(repo_path).unwrap();
-            let actual =
-                repo.subtree_add("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
-            assert!(actual.is_err(), "Expected an error");
-            let actual = actual.unwrap_err();
-            assert_eq!(actual, SubtreeAddError::BareRepository);
-            tmp_dir.close().unwrap();
-        }
-
-        #[test]
         fn dirty_work_tree() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
@@ -1399,19 +1238,6 @@ mod test {
     mod subtree_pull {
         use crate::{Repository, SubtreePullError};
         use tempfile::TempDir;
-
-        #[test]
-        fn bare_repo() {
-            let tmp_dir = TempDir::new().unwrap();
-            let repo_path = tmp_dir.path();
-            let repo = Repository::create_bare(repo_path).unwrap();
-            let actual =
-                repo.subtree_pull("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
-            assert!(actual.is_err(), "Expected an error");
-            let actual = actual.unwrap_err();
-            assert_eq!(actual, SubtreePullError::BareRepository);
-            tmp_dir.close().unwrap();
-        }
 
         #[test]
         fn dirty_work_tree() {
