@@ -22,6 +22,7 @@
 
 pub use posix_errors::{PosixError, EACCES, EINVAL, ENOENT};
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::Output;
@@ -183,16 +184,23 @@ fn cwd() -> Result<PathBuf, RepoError> {
 /// A path which is canonicalized and exists.
 #[derive(Debug, Clone)]
 pub struct AbsoluteDirPath(PathBuf);
+impl AsRef<OsStr> for AbsoluteDirPath {
+    fn as_ref(&self) -> &OsStr {
+        self.0.as_os_str()
+    }
+}
 
-impl AbsoluteDirPath {
-    fn new(path: &Path) -> Result<Self, RepoError> {
+impl TryFrom<&Path> for AbsoluteDirPath {
+    type Error = RepoError;
+
+    fn try_from(value: &Path) -> Result<Self, Self::Error> {
         let path_buf;
-        if path.is_absolute() {
-            path_buf = path.to_path_buf();
-        } else if let Ok(p) = path.canonicalize() {
+        if value.is_absolute() {
+            path_buf = value.to_path_buf();
+        } else if let Ok(p) = value.canonicalize() {
             path_buf = p;
         } else {
-            return Err(RepoError::AbsolutionError(path.to_path_buf()));
+            return Err(RepoError::AbsolutionError(value.to_path_buf()));
         }
 
         Ok(Self(path_buf))
@@ -262,7 +270,7 @@ fn search_git_dir(start: &Path) -> Result<AbsoluteDirPath, RepoError> {
     ) {
         (Ok(head_path), Ok(objects_path)) => {
             if head_path.is_file() && objects_path.is_dir() {
-                return AbsoluteDirPath::new(&path);
+                return AbsoluteDirPath::try_from(path.as_path());
             }
         }
         (_, _) => {}
@@ -271,7 +279,7 @@ fn search_git_dir(start: &Path) -> Result<AbsoluteDirPath, RepoError> {
     for parent in path.ancestors() {
         let candidate = parent.join(".git");
         if candidate.is_dir() && candidate.exists() {
-            return Ok(AbsoluteDirPath::new(candidate.as_ref()))?;
+            return Ok(candidate.as_path().try_into()?);
         }
     }
     Err(RepoError::GitDirNotFound)
@@ -290,14 +298,14 @@ fn work_tree_from_git_dir(git_dir: &AbsoluteDirPath) -> Result<Option<AbsoluteDi
     }
 
     match git_dir.0.parent() {
-        Some(dir) => Ok(Some(AbsoluteDirPath::new(dir)?)),
+        Some(dir) => Ok(Some(dir.try_into()?)),
         None => Ok(None),
     }
 }
 
 fn git_dir_from_work_tree(work_tree: &AbsoluteDirPath) -> Result<AbsoluteDirPath, RepoError> {
     let result = work_tree.0.join(".git");
-    AbsoluteDirPath::new(result.as_ref())
+    result.as_path().try_into()
 }
 
 /// Invalid git reference was provided
@@ -397,7 +405,7 @@ impl Repository {
     #[inline]
     pub fn work_tree(&self) -> Option<PathBuf> {
         match self {
-            Self::Normal { work_tree, .. } => Some(work_tree.0.clone()),
+            Self::Normal { work_tree, .. } => Some(work_tree.into()),
             Self::Bare { .. } => None,
         }
     }
@@ -487,8 +495,8 @@ impl Repository {
         let out = cmd.arg("init").current_dir(&path).output().unwrap();
 
         if out.status.success() {
-            let work_tree = AbsoluteDirPath::new(path).unwrap();
-            let git_dir = AbsoluteDirPath::new(&path.join(".git")).unwrap();
+            let work_tree = path.try_into().unwrap();
+            let git_dir = path.join(".git").as_path().try_into().unwrap();
             Ok(Self::Normal { git_dir, work_tree })
         } else {
             Err(String::from_utf8_lossy(&out.stderr).to_string())
@@ -513,7 +521,7 @@ impl Repository {
             .unwrap();
 
         if out.status.success() {
-            let git_dir = AbsoluteDirPath::new(path).unwrap();
+            let git_dir = path.try_into().unwrap();
             Ok(Self::Bare { git_dir })
         } else {
             Err(String::from_utf8_lossy(&out.stderr).to_string())
@@ -532,13 +540,13 @@ impl Repository {
         match (change, git, work) {
             (None, None, None) => {
                 let git_dir = if let Ok(gd) = std::env::var("GIT_DIR") {
-                    AbsoluteDirPath::new(gd.as_ref())?
+                    AbsoluteDirPath::try_from(gd.as_ref())?
                 } else {
                     search_git_dir(&cwd()?)?
                 };
 
                 let work_tree = if let Ok(wt) = std::env::var("GIT_WORK_TREE") {
-                    Some(AbsoluteDirPath::new(wt.as_ref())?)
+                    Some(AbsoluteDirPath::try_from(wt.as_ref())?)
                 } else {
                     work_tree_from_git_dir(&git_dir)?
                 };
@@ -549,18 +557,18 @@ impl Repository {
                 let root = change.map_or_else(PathBuf::new, PathBuf::from);
                 match (git, work) {
                     (Some(g_dir), None) => {
-                        let git_dir = AbsoluteDirPath::new(&root.join(g_dir))?;
+                        let git_dir = root.join(g_dir).as_path().try_into()?;
                         let work_tree = work_tree_from_git_dir(&git_dir)?;
                         Ok(Self::new(git_dir, work_tree))
                     }
                     (None, Some(w_dir)) => {
-                        let work_tree = AbsoluteDirPath::new(&root.join(w_dir))?;
+                        let work_tree = root.join(w_dir).as_path().try_into()?;
                         let git_dir = git_dir_from_work_tree(&work_tree)?;
                         Ok(Self::Normal { git_dir, work_tree })
                     }
                     (Some(g_dir), Some(w_dir)) => {
-                        let git_dir = AbsoluteDirPath::new(&root.join(g_dir))?;
-                        let work_tree = AbsoluteDirPath::new(&root.join(w_dir))?;
+                        let git_dir = root.join(g_dir).as_path().try_into()?;
+                        let work_tree = root.join(w_dir).as_path().try_into()?;
                         Ok(Self::Normal { git_dir, work_tree })
                     }
                     (None, None) => {
