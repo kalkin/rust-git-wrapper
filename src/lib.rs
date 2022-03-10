@@ -86,18 +86,23 @@ pub fn tags_from_remote(url: &str) -> Result<Vec<String>, PosixError> {
 
 /// Failed to read config
 #[allow(missing_docs)]
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum ConfigReadError {
+    #[error("Invalid section key in config {0}")]
     InvalidSectionOrKey(String),
+    #[error("Invalid config file {0}")]
     InvalidConfigFile(String),
 }
 
 /// Failed to change configuration file
 #[allow(missing_docs)]
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum ConfigSetError {
+    #[error("{0}")]
     InvalidSectionOrKey(String),
+    #[error("{0}")]
     InvalidConfigFile(String),
+    #[error("{0}")]
     WriteFailed(String),
 }
 
@@ -362,8 +367,9 @@ fn git_dir_from_work_tree(work_tree: &AbsoluteDirPath) -> Result<AbsoluteDirPath
 
 /// Invalid git reference was provided
 #[allow(missing_docs)]
-#[derive(Debug, PartialEq)]
-pub struct InvalidRefError;
+#[derive(thiserror::Error, Debug, PartialEq)]
+#[error("Invalid git reference {0}")]
+pub struct InvalidRefError(String);
 
 /// Getters
 impl Repository {
@@ -488,7 +494,7 @@ impl Repository {
             .output()
             .expect("Failed to execute git-commit(1)");
         if !out.status.success() {
-            return Err(InvalidRefError);
+            return Err(InvalidRefError(long_ref.to_owned()));
         }
 
         let short_ref = String::from_utf8_lossy(&out.stderr).to_string();
@@ -593,38 +599,59 @@ impl Repository {
 
 /// Failed to add subtree
 #[allow(missing_docs)]
-#[derive(Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 pub enum SubtreeAddError {
+    #[error("Bare repository")]
+    BareRepository,
+    #[error("Working tree dirty")]
     WorkTreeDirty,
+    #[error("{0}")]
     Failure(String, i32),
+}
+
+impl From<SubtreeAddError> for PosixError {
+    #[inline]
+    fn from(err: SubtreeAddError) -> Self {
+        match err {
+            SubtreeAddError::BareRepository | SubtreeAddError::WorkTreeDirty => {
+                Self::new(EINVAL, format!("{}", err))
+            }
+            SubtreeAddError::Failure(msg, code) => Self::new(code, msg),
+        }
+    }
 }
 
 /// Failed to pull changes from remote in to subtree
 #[allow(missing_docs)]
-#[derive(Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 pub enum SubtreePullError {
+    #[error("Working tree dirty")]
     WorkTreeDirty,
+    #[error("{0}")]
     Failure(String, i32),
 }
 
 /// Failed to push changes from subtree to remote
 #[allow(missing_docs)]
-#[derive(Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 pub enum SubtreePushError {
+    #[error("{0}")]
     Failure(String, i32),
 }
 
 /// Failed to split subtree
 #[allow(missing_docs)]
-#[derive(Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 pub enum SubtreeSplitError {
+    #[error("Work tree is dirty")]
     WorkTreeDirty,
+    #[error("{0}")]
     Failure(String, i32),
 }
 
 /// Failure to stage
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 pub enum StagingError {
     #[error("`{0}`")]
     Failure(String, i32),
@@ -662,31 +689,31 @@ pub enum CommitError {
 }
 
 /// Failed to find reference on remote
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum RefSearchError {
     /// Thrown when `git-ls-remote(1)` fails to execute.
+    #[error("{0}")]
     Failure(String),
     /// Generic IO error
-    IOError(std::io::Error),
+    #[error("{0}")]
+    IOError(#[from] std::io::Error),
     /// Failed to find reference
-    NotFound,
+    #[error("Failed to find reference {0}")]
+    NotFound(String),
     /// `git-ls-remote(1)` returned garbage on `STDOUT`
+    #[error("Failed to parse git-ls-remote(1) output: {0}")]
     ParsingFailure(String),
-    /// Failed to decode strings
-    UTF8Decode(std::string::FromUtf8Error),
 }
 
-impl From<std::io::Error> for RefSearchError {
+impl From<RefSearchError> for PosixError {
     #[inline]
-    fn from(prev: std::io::Error) -> Self {
-        Self::IOError(prev)
-    }
-}
-
-impl From<std::string::FromUtf8Error> for RefSearchError {
-    #[inline]
-    fn from(prev: std::string::FromUtf8Error) -> Self {
-        Self::UTF8Decode(prev)
+    fn from(err: RefSearchError) -> Self {
+        match err {
+            RefSearchError::Failure(msg) => Self::new(ENOENT, msg),
+            RefSearchError::IOError(e) => e.into(),
+            RefSearchError::NotFound(s) => Self::new(ENOENT, s),
+            RefSearchError::ParsingFailure(e) => Self::new(EINVAL, e),
+        }
     }
 }
 
@@ -784,7 +811,7 @@ impl Repository {
             let msg = String::from_utf8_lossy(proc.stderr.as_ref()).to_string();
             return Err(RefSearchError::Failure(msg));
         }
-        let stdout = String::from_utf8(proc.stdout)?;
+        let stdout = String::from_utf8_lossy(&proc.stdout);
         if let Some(first_line) = stdout.lines().next() {
             if let Some(id) = first_line.split('\t').next() {
                 return Ok(id.to_owned());
@@ -792,7 +819,7 @@ impl Repository {
             return Err(RefSearchError::ParsingFailure(first_line.to_owned()));
         }
 
-        Err(RefSearchError::NotFound)
+        Err(RefSearchError::NotFound(git_ref.to_owned()))
     }
 
     /// # Errors
@@ -1293,8 +1320,12 @@ mod test {
             let result =
                 repo.remote_ref_to_id("https://github.com/kalkin/file-expert", "v230.40.50");
             assert!(result.is_err());
-            let actual = matches!(result.unwrap_err(), RefSearchError::NotFound);
-            assert!(actual, "should not find v230.40.50")
+            let _expected =
+                RefSearchError::NotFound("Failed to find reference v230.40.50".to_owned());
+            assert!(
+                matches!(result.unwrap_err(), _expected),
+                "should not find v230.40.50"
+            )
         }
 
         #[test]
