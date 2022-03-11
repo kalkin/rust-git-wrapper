@@ -92,6 +92,8 @@ pub enum ConfigReadError {
     InvalidSectionOrKey(String),
     #[error("Invalid config file {0}")]
     InvalidConfigFile(String),
+    #[error("{0}")]
+    Failure(String, i32),
 }
 
 /// Failed to change configuration file
@@ -104,6 +106,8 @@ pub enum ConfigSetError {
     InvalidConfigFile(String),
     #[error("{0}")]
     WriteFailed(String),
+    #[error("{0}")]
+    Failure(String, i32),
 }
 
 /// # Errors
@@ -127,7 +131,7 @@ pub fn config_file_set(file: &Path, key: &str, value: &str) -> Result<(), Config
             1 => Err(ConfigSetError::InvalidSectionOrKey(msg)),
             3 => Err(ConfigSetError::InvalidConfigFile(msg)),
             4 => Err(ConfigSetError::WriteFailed(msg)),
-            _ => panic!("Unexpected error:\n{}", msg),
+            code => Err(ConfigSetError::Failure(msg, code)),
         }
     }
 }
@@ -255,9 +259,9 @@ trait GenericRepository {
                     let msg = String::from_utf8_lossy(out.stderr.as_ref()).to_string();
                     Err(ConfigReadError::InvalidConfigFile(msg))
                 }
-                _ => {
+                code => {
                     let msg = String::from_utf8_lossy(out.stderr.as_ref());
-                    panic!("Unexpected git-config(1) failure:\n{}", msg);
+                    Err(ConfigReadError::Failure(msg.to_string(), code))
                 }
             }
         }
@@ -1062,6 +1066,8 @@ pub enum InvalidCommitishError {
     One(String),
     #[error("One or Multiple invalid reference or commit ids: `{0:?}`")]
     Multiple(Vec<String>),
+    #[error("{0}")]
+    Failure(String, i32),
 }
 
 /// Commit Functions
@@ -1100,7 +1106,8 @@ impl Repository {
             }
             1 => Ok(None),
             code => {
-                panic!("Unexpected error code for merge-base: {}", code);
+                let msg = String::from_utf8_lossy(&output.stdout);
+                Err(InvalidCommitishError::Failure(msg.to_string(), code))
             }
         }
     }
