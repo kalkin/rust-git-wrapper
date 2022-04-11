@@ -1218,7 +1218,7 @@ mod test {
                 .output()
                 .unwrap();
             assert!(out.status.success(), "Try to make repository sparse");
-            assert!(repo.is_sparse(), "Not sparse repository")
+            assert!(repo.is_sparse(), "Not sparse repository");
         }
 
         #[test]
@@ -1226,7 +1226,7 @@ mod test {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).expect("Created repository");
-            assert!(!repo.is_sparse(), "Not sparse repository")
+            assert!(!repo.is_sparse(), "Not sparse repository");
         }
 
         #[test]
@@ -1356,7 +1356,7 @@ mod test {
             let result = repo.remote_ref_to_id("https://example.com/asd/foo", "v230.40.50");
             assert!(result.is_err());
             let actual = matches!(result.unwrap_err(), RefSearchError::Failure(_));
-            assert!(actual, "should not find any repo")
+            assert!(actual, "should not find any repo");
         }
 
         #[test]
@@ -1368,7 +1368,7 @@ mod test {
             assert!(result.is_ok());
             let actual = result.unwrap();
             let expected = "24f624a0268f6cbcfc163abef5f3acbc6c11085e".to_owned();
-            assert_eq!(expected, actual, "Find commit id for v0.9.0")
+            assert_eq!(expected, actual, "Find commit id for v0.9.0");
         }
     }
 }
