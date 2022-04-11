@@ -1197,7 +1197,7 @@ mod test {
             let repo_path = tmp_dir.path();
             let repo = BareRepository::create(repo_path).expect("Created bare repository");
             let actual = repo.config("core.bare").unwrap();
-            assert_eq!(actual, "true".to_string(), "Expected true");
+            assert_eq!(actual, "true".to_owned(), "Expected true");
 
             tmp_dir.close().unwrap();
         }
@@ -1369,7 +1369,7 @@ mod test {
             let result = repo.remote_ref_to_id("https://github.com/kalkin/file-expert", "v0.9.0");
             assert!(result.is_ok());
             let actual = result.unwrap();
-            let expected = "24f624a0268f6cbcfc163abef5f3acbc6c11085e".to_string();
+            let expected = "24f624a0268f6cbcfc163abef5f3acbc6c11085e".to_owned();
             assert_eq!(expected, actual, "Find commit id for v0.9.0")
         }
     }
