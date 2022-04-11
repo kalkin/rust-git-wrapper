@@ -1143,11 +1143,9 @@ mod test {
         fn git_dir_not_found() {
             let tmp_dir = TempDir::new().unwrap();
             let discovery_path = tmp_dir.path();
-            let actual = Repository::discover(discovery_path);
-            assert!(actual.is_err(), "Fail to find repo in an empty directory");
-            let actual = actual.err().unwrap();
-            assert!(actual == RepoError::GitDirNotFound);
-            tmp_dir.close().unwrap();
+            let err = Repository::discover(discovery_path)
+                .expect_err("Fail to find repo in an empty directory");
+            assert!(err == RepoError::GitDirNotFound);
         }
 
         #[test]
@@ -1256,11 +1254,10 @@ mod test {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).expect("Created repository");
-            let actual =
-                repo.subtree_add("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
-            assert!(actual.is_err(), "Expected an error");
-            let actual = actual.unwrap_err();
-            assert_eq!(actual, SubtreeAddError::WorkTreeDirty);
+            let err = repo
+                .subtree_add("https://example.com/foo/bar", "bar", "HEAD", "Some Message")
+                .expect_err("Expected an error");
+            assert_eq!(err, SubtreeAddError::WorkTreeDirty);
             tmp_dir.close().unwrap();
         }
 
@@ -1293,12 +1290,10 @@ mod test {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
             let repo = Repository::create(repo_path).expect("Created repository");
-            let actual =
-                repo.subtree_pull("https://example.com/foo/bar", "bar", "HEAD", "Some Message");
-            assert!(actual.is_err(), "Expected an error");
-            let actual = actual.unwrap_err();
-            assert_eq!(actual, SubtreePullError::WorkTreeDirty);
-            tmp_dir.close().unwrap();
+            let err = repo
+                .subtree_pull("https://example.com/foo/bar", "bar", "HEAD", "Some Message")
+                .expect_err("Expected an error");
+            assert_eq!(err, SubtreePullError::WorkTreeDirty);
         }
 
         #[test]
@@ -1342,12 +1337,15 @@ mod test {
             let result =
                 repo.remote_ref_to_id("https://github.com/kalkin/file-expert", "v230.40.50");
             assert!(result.is_err());
-            let _expected =
-                RefSearchError::NotFound("Failed to find reference v230.40.50".to_owned());
-            assert!(
-                matches!(result.unwrap_err(), _expected),
-                "should not find v230.40.50"
-            )
+            #[allow(clippy::shadow_unrelated)]
+            {
+                let _expected =
+                    RefSearchError::NotFound("Failed to find reference v230.40.50".to_owned());
+                assert!(
+                    matches!(result.unwrap_err(), _expected),
+                    "should not find v230.40.50"
+                );
+            }
         }
 
         #[test]
