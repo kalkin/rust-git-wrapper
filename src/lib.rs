@@ -560,45 +560,42 @@ impl Repository {
         git: Option<&str>,
         work: Option<&str>,
     ) -> Result<Self, RepoError> {
-        match (change, git, work) {
-            (None, None, None) => {
-                let git_dir = if let Ok(gd) = std::env::var("GIT_DIR") {
-                    AbsoluteDirPath::try_from(gd.as_ref())?
-                } else {
-                    search_git_dir(&cwd()?)?
-                };
+        if (change, git, work) == (None, None, None) {
+            let git_dir = if let Ok(gd) = std::env::var("GIT_DIR") {
+                AbsoluteDirPath::try_from(gd.as_ref())?
+            } else {
+                search_git_dir(&cwd()?)?
+            };
 
-                let work_tree = if let Ok(wt) = std::env::var("GIT_WORK_TREE") {
-                    AbsoluteDirPath::try_from(wt.as_ref())?
-                } else {
-                    work_tree_from_git_dir(&git_dir)?
-                };
+            let work_tree = if let Ok(wt) = std::env::var("GIT_WORK_TREE") {
+                AbsoluteDirPath::try_from(wt.as_ref())?
+            } else {
+                work_tree_from_git_dir(&git_dir)?
+            };
 
-                Ok(Self { git_dir, work_tree })
-            }
-            (_, _, _) => {
-                let root = change.map_or_else(PathBuf::new, PathBuf::from);
-                match (git, work) {
-                    (Some(g_dir), None) => {
-                        let git_dir = root.join(g_dir).as_path().try_into()?;
-                        let work_tree = work_tree_from_git_dir(&git_dir)?;
-                        Ok(Self { git_dir, work_tree })
-                    }
-                    (None, Some(w_dir)) => {
-                        let work_tree = root.join(w_dir).as_path().try_into()?;
-                        let git_dir = git_dir_from_work_tree(&work_tree)?;
-                        Ok(Self { git_dir, work_tree })
-                    }
-                    (Some(g_dir), Some(w_dir)) => {
-                        let git_dir = root.join(g_dir).as_path().try_into()?;
-                        let work_tree = root.join(w_dir).as_path().try_into()?;
-                        Ok(Self { git_dir, work_tree })
-                    }
-                    (None, None) => {
-                        let git_dir = search_git_dir(&root)?;
-                        let work_tree = work_tree_from_git_dir(&git_dir)?;
-                        Ok(Self { git_dir, work_tree })
-                    }
+            Ok(Self { git_dir, work_tree })
+        } else {
+            let root = change.map_or_else(PathBuf::new, PathBuf::from);
+            match (git, work) {
+                (Some(g_dir), None) => {
+                    let git_dir = root.join(g_dir).as_path().try_into()?;
+                    let work_tree = work_tree_from_git_dir(&git_dir)?;
+                    Ok(Self { git_dir, work_tree })
+                }
+                (None, Some(w_dir)) => {
+                    let work_tree = root.join(w_dir).as_path().try_into()?;
+                    let git_dir = git_dir_from_work_tree(&work_tree)?;
+                    Ok(Self { git_dir, work_tree })
+                }
+                (Some(g_dir), Some(w_dir)) => {
+                    let git_dir = root.join(g_dir).as_path().try_into()?;
+                    let work_tree = root.join(w_dir).as_path().try_into()?;
+                    Ok(Self { git_dir, work_tree })
+                }
+                (None, None) => {
+                    let git_dir = search_git_dir(&root)?;
+                    let work_tree = work_tree_from_git_dir(&git_dir)?;
+                    Ok(Self { git_dir, work_tree })
                 }
             }
         }
