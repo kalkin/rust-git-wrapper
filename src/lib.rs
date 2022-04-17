@@ -18,8 +18,6 @@
 //! A wrapper around [git(1)](https://git-scm.com/docs/git) inspired by
 //! [`GitPython`](https://github.com/gitpython-developers/GitPython).
 
-#![warn(clippy::all)]
-
 pub use posix_errors::{PosixError, EACCES, EINVAL, ENOENT};
 use std::collections::HashMap;
 use std::ffi::OsStr;
