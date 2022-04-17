@@ -323,16 +323,13 @@ fn search_git_dir(start: &Path) -> Result<AbsoluteDirPath, RepoError> {
         }
     }
 
-    match (
+    if let (Ok(head_path), Ok(objects_path)) = (
         path.join("HEAD").canonicalize(),
         path.join("objects").canonicalize(),
     ) {
-        (Ok(head_path), Ok(objects_path)) => {
-            if head_path.is_file() && objects_path.is_dir() {
-                return AbsoluteDirPath::try_from(path.as_path());
-            }
+        if head_path.is_file() && objects_path.is_dir() {
+            return AbsoluteDirPath::try_from(path.as_path());
         }
-        (_, _) => {}
     }
 
     for parent in path.ancestors() {
