@@ -285,7 +285,7 @@ pub struct Repository {
 
 /// Error during repository instantiation
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum RepoError {
     #[error("GIT_DIR Not found")]
     GitDirNotFound,
@@ -367,7 +367,7 @@ fn git_dir_from_work_tree(work_tree: &AbsoluteDirPath) -> Result<AbsoluteDirPath
 
 /// Invalid git reference was provided
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 #[error("Invalid git reference {0}")]
 pub struct InvalidRefError(String);
 
@@ -604,7 +604,7 @@ impl Repository {
 
 /// Failed to add subtree
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum SubtreeAddError {
     #[error("Bare repository")]
     BareRepository,
@@ -628,7 +628,7 @@ impl From<SubtreeAddError> for PosixError {
 
 /// Failed to pull changes from remote in to subtree
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum SubtreePullError {
     #[error("Working tree dirty")]
     WorkTreeDirty,
@@ -638,7 +638,7 @@ pub enum SubtreePullError {
 
 /// Failed to push changes from subtree to remote
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum SubtreePushError {
     #[error("{0}")]
     Failure(String, i32),
@@ -646,7 +646,7 @@ pub enum SubtreePushError {
 
 /// Failed to split subtree
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum SubtreeSplitError {
     #[error("Work tree is dirty")]
     WorkTreeDirty,
@@ -656,7 +656,7 @@ pub enum SubtreeSplitError {
 
 /// Failure to stage
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq)]
 pub enum StagingError {
     #[error("`{0}`")]
     Failure(String, i32),
