@@ -387,6 +387,20 @@ impl Repository {
         output.status.success()
     }
 
+    /// # Panics
+    ///
+    /// Panics of executing git-rev-parse(1) fails
+    #[must_use]
+    #[inline]
+    pub fn is_shallow(&self) -> bool {
+        let out = self
+            .git()
+            .args(&["rev-parse", "--is-shallow-repository"])
+            .output()
+            .expect("Failed to execute git-rev-parse(1)");
+        String::from_utf8_lossy(&out.stdout).trim() != "false"
+    }
+
     /// Returns a `HashMap` of git remotes
     #[must_use]
     #[inline]
