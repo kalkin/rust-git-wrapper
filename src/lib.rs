@@ -1124,6 +1124,15 @@ impl GenericRepository for Repository {
     }
 }
 
+/// Exports NAME & EMAIL variables so git don't complain if no user is setup
+#[inline]
+pub fn setup_test_author() {
+    std::env::set_var("GIT_AUTHOR_NAME", "Max Musterman");
+    std::env::set_var("GIT_AUTHOR_EMAIL", "max@example.com");
+    std::env::set_var("GIT_COMMITTER_NAME", "Max Musterman");
+    std::env::set_var("GIT_COMMITTER_EMAIL", "max@example.com");
+}
+
 #[cfg(test)]
 mod test {
 
