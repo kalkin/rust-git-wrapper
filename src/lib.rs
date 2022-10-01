@@ -1247,7 +1247,7 @@ mod test {
     }
 
     mod subtree_add {
-        use crate::{Repository, SubtreeAddError};
+        use crate::{setup_test_author, Repository, SubtreeAddError};
         use tempfile::TempDir;
 
         #[test]
@@ -1266,6 +1266,7 @@ mod test {
         fn successfull() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
+            setup_test_author();
             let repo = Repository::create(repo_path).expect("Created repository");
             let readme = repo_path.join("README.md");
             std::fs::File::create(&readme).unwrap();
@@ -1283,7 +1284,7 @@ mod test {
     }
 
     mod subtree_pull {
-        use crate::{Repository, SubtreePullError};
+        use crate::{setup_test_author, Repository, SubtreePullError};
         use tempfile::TempDir;
 
         #[test]
@@ -1301,6 +1302,7 @@ mod test {
         fn successfull() {
             let tmp_dir = TempDir::new().unwrap();
             let repo_path = tmp_dir.path();
+            setup_test_author();
             let repo = Repository::create(repo_path).expect("Created repository");
             let readme = repo_path.join("README.md");
             std::fs::File::create(&readme).unwrap();
